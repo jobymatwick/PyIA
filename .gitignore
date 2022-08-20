@@ -127,3 +127,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Files generated or downloaded by script
+token.json
+regions.json
+ca.rsa.4096.crt
