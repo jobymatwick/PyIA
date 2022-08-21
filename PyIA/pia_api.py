@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 def getToken(creds: dict[str:str]) -> str:
     """Get a PIA auth token. Returns a stored token if found and still valid,
-        otherwise attempts to generate and store a new one.
+    otherwise attempts to generate and store a new one.
 
     Args:
         creds (dict[str:str]): PIA credentials. Dict must have 'user' and 'pass'
@@ -92,45 +92,15 @@ def getToken(creds: dict[str:str]) -> str:
 
 
 def getRegionInfo(region: str) -> dict:
-    """Get the server info for a given server region. Uses a cached region file,
-        and replaces it if stale.
+    """Get the server info for a given server region.
 
     Args:
         region (str): ID of region to get info of.
 
-    Raises:
-        RuntimeError: Failed to get region info from server.
-        ValueError: Region info received appears to be invalid.
-
     Returns:
         dict: Region server info including name, IPs, hostnames, and port.
     """
-    stale = True
-    try:
-        with open(REGION_FILE, "r") as region_file:
-            regions = json.load(region_file)
-
-        exp_time = regions["time"] + REGION_LIFE_SECONDS
-        now_time = time.time()
-        if exp_time > now_time:
-            logger.debug("Found valid region file")
-            stale = False
-    except FileNotFoundError:
-        pass
-
-    if stale:
-        logger.info(f"Fetching new region info file.")
-        req = requests.get(REGION_ADDRESS)
-        if req.status_code != 200:
-            raise RuntimeError(f"Failed to get region info file. ({ req.status_code })")
-        if len(req.text) < 1000:
-            raise ValueError(f"Region info file is suspiciously short.")
-        regions = json.loads(req.text.splitlines()[0])
-        regions["time"] = time.time()
-
-        with open(REGION_FILE, "w+") as region_file:
-            json.dump(regions, region_file)
-
+    regions = _getRegions()
     raw_info = next(item for item in regions["regions"] if item["id"] == region)
     region_info = {
         "name": raw_info["name"],
@@ -142,7 +112,7 @@ def getRegionInfo(region: str) -> dict:
 
 def authenticate(region_info: dict, token: str, pubkey: str, ip_id: int = 0) -> dict:
     """Attempt to authenticate a Wireguard pubkey with a PIA server, and get the
-        connection info if successful.
+    connection info if successful.
 
     Args:
         region_info (dict): Server to authenticate with.
@@ -189,3 +159,58 @@ def authenticate(region_info: dict, token: str, pubkey: str, ip_id: int = 0) -> 
         "endpoint": f"{ data['server_ip'] }:{ str(data['server_port']) }",
     }
     return connection_info
+
+
+def printRegions() -> None:
+    """Print a list of all server regions and whether or not they support port
+    forwarding.
+    """
+    regions = sorted(_getRegions()["regions"], key=lambda d: d["id"])
+    print("Listing all regions. (*) means regions supports port forwarding.\n")
+    print("  Region ID             Region Name")
+    print("---------------------------------------------")
+    for region in regions:
+        print(
+            f'{ "*" if region["port_forward"] else " " } { region["id"] :22}'
+            f'{ region["name"] }'
+        )
+
+
+def _getRegions() -> dict:
+    """Get a list of all server regions. Uses a cached region file, and replaces
+    it if stale.
+
+    Raises:
+        RuntimeError: Failed to get region info from server.
+        ValueError: Region info received appears to be invalid.
+
+    Returns:
+        dict: All server regions.
+    """
+    stale = True
+    try:
+        with open(REGION_FILE, "r") as region_file:
+            regions = json.load(region_file)
+
+        exp_time = regions["time"] + REGION_LIFE_SECONDS
+        now_time = time.time()
+        if exp_time > now_time:
+            logger.debug("Found valid region file")
+            stale = False
+    except FileNotFoundError:
+        pass
+
+    if stale:
+        logger.info(f"Fetching new region info file.")
+        req = requests.get(REGION_ADDRESS)
+        if req.status_code != 200:
+            raise RuntimeError(f"Failed to get region info file. ({ req.status_code })")
+        if len(req.text) < 1000:
+            raise ValueError(f"Region info file is suspiciously short.")
+        regions = json.loads(req.text.splitlines()[0])
+        regions["time"] = time.time()
+
+        with open(REGION_FILE, "w+") as region_file:
+            json.dump(regions, region_file)
+
+    return regions

@@ -1,0 +1,8 @@
+---
+
+username: a1234567
+password: aBcDe12345
+region: vancouver_ca
+port_forward: true
+port_forward_command: echo "Port changed!"
+log_level: info
