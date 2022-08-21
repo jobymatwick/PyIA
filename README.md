@@ -1,4 +1,5 @@
 # PyIA (Pyvate Internet Access)
+[![Test Status](https://github.com/jobymatwick/PyIA/actions/workflows/pytest.yaml/badge.svg?branch=main)](https://github.com/jobymatwick/PyIA/actions/workflows/pytest.yaml?branch=main)
 [![Coverage Status](https://coveralls.io/repos/github/jobymatwick/PyIA/badge.svg?branch=main)](https://coveralls.io/github/jobymatwick/PyIA?branch=main)
 
 

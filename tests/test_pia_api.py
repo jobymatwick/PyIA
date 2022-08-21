@@ -150,19 +150,20 @@ class TestPiaApi:
         )
         assert self.api._getStoredRegions() == []
 
-    def test_authenticateInvalidRegion(self, requests_mock: Mocker):
-        requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
-        with pytest.raises(ValueError):
-            self.api.authenticate("invalid", "")
-
     def test_downloadsCert(self, requests_mock: Mocker):
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
-        os.remove("ca.rsa.4096.crt")
+        if os.path.exists("ca.rsa.4096.crt"):
+            os.remove("ca.rsa.4096.crt")
         try:
             self.api.authenticate("testid0", "")
         except Exception:
             pass
         assert os.path.exists("ca.rsa.4096.crt")
+
+    def test_authenticateInvalidRegion(self, requests_mock: Mocker):
+        requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
+        with pytest.raises(ValueError):
+            self.api.authenticate("invalid", "")
 
     def test_checksAuthResp(self, requests_mock: Mocker):
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)

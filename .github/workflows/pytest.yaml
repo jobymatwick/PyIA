@@ -1,6 +1,6 @@
 ---
 
-name: pytest unit tests
+name: tests
 
 on: [push]
 
