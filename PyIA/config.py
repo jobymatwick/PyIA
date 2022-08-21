@@ -21,7 +21,7 @@ import yaml
 import os
 import sys
 import logging
-import pia_api
+from . import pia_api
 
 CONFIG_DICT = {
     "region": None,

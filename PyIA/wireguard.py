@@ -22,8 +22,6 @@ import subprocess
 import requests
 import logging
 
-import pia_api
-
 WIREGUARD_DIR = "/etc/wireguard"
 IP_RETRIES = 3
 

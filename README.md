@@ -14,6 +14,8 @@ Expect major changes.
 - `git`
 - `wg-quick` (from `wireguard` package)
 - `ping`
+- On Debian-based system you may need to run
+  `sudo sudo ln -s /usr/bin/resolvectl /usr/local/bin/resolvconf`
 
 ## Installation
 1. Clone this repo:
