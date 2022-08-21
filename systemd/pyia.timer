@@ -1,0 +1,11 @@
+[Unit]
+Description=Setup and maintain PIA VPN connection
+
+[Timer]
+Unit=pyia.service
+OnCalendar=*:0/10
+AccuracySec=5m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

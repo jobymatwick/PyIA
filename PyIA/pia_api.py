@@ -19,198 +19,179 @@
 import json
 import logging
 import os
+from typing import Any
 import requests
 import requests_toolbelt.adapters.host_header_ssl as host_adapter
 import time
 
-TOKEN_LIFE_SECONDS = 3600  # 1 hour
-TOKEN_ADDRESS = "https://www.privateinternetaccess.com/gtoken/generateToken"
-TOKEN_FILE = "token.json"
-
-REGION_LIFE_SECONDS = 43200  # 12 hours
-REGION_ADDRESS = "https://serverlist.piaservers.net/vpninfo/servers/v6"
-REGION_FILE = "regions.json"
-
-SSL_CERT_ADDRESS = "https://raw.githubusercontent.com/pia-foss/manual-connections/master/ca.rsa.4096.crt"
-SSL_CERT_FILE = "ca.rsa.4096.crt"
-
 logger = logging.getLogger(__name__)
 
 
-def getToken(creds: dict[str:str]) -> str:
-    """Get a PIA auth token. Returns a stored token if found and still valid,
-    otherwise attempts to generate and store a new one.
+class PiaApi:
+    TOKEN_LIFE_SECONDS = 3600  # 1 hour
+    TOKEN_ADDRESS = "https://www.privateinternetaccess.com/gtoken/generateToken"
+    REGION_LIFE_SECONDS = 43200  # 12 hours
+    REGION_ADDRESS = "https://serverlist.piaservers.net/vpninfo/servers/v6"
+    SSL_CERT_ADDRESS = "https://raw.githubusercontent.com/pia-foss/manual-connections/master/ca.rsa.4096.crt"
 
-    Args:
-        creds (dict[str:str]): PIA credentials. Dict must have 'user' and 'pass'
-        keys.
+    def __init__(self, username: str, password: str, data_file: str = "data.json"):
+        self.username = username
+        self.password = password
+        self.data_file = data_file
+        self._loadData()
 
-    Raises:
-        RuntimeError: Occurs when failed to get a token.
+    def token(self) -> str:
+        """Get a PIA auth token. Use a stored value if it is OK, otherwise get
+        and store a new one.
 
-    Returns:
-        str: Stored or generated PIA auth token.
-    """
-    try:
-        with open(TOKEN_FILE, "r") as token_file:
-            token = json.load(token_file)
+        Raises:
+            RuntimeError: Request for new token failed
 
-        exp_time = token["time"] + TOKEN_LIFE_SECONDS
-        now_time = time.time()
-        if token["user"] != creds["user"]:
-            logger.debug(f"Token file is for different user")
-        elif exp_time < now_time:
-            logger.debug(f"Toek file is stale")
-        else:
-            logger.debug(
-                f'Found valid token "{ token["token"][:10] }..." '
-                f'for user { creds["user"] } '
-                f"valid for { int(exp_time - now_time) } more seconds."
+        Returns:
+            str: PIA auth token
+        """
+        stored = self._getStoredToken()
+        if stored:
+            return stored
+
+        logger.info(f"Fetching a new token for user {self.username}")
+        resp = requests.get(
+            self.TOKEN_ADDRESS, auth=(self.username, self.password)
+        ).json()
+        if resp["status"] != "OK":
+            raise RuntimeError(f"Failed to fetch token ({resp['message']})")
+
+        data = self._loadData()
+        data["token"] = {
+            "user": self.username,
+            "expiry_time": time.time() + self.TOKEN_LIFE_SECONDS,
+            "key": resp["token"],
+        }
+        self._saveData(data)
+        logger.info("Successfully got new token")
+        return data["token"]["key"]
+
+    def regions(self) -> dict[str, dict]:
+        """Get a list of PIA server regions. Uses a cached list and refreshes
+        when stale.
+
+        Raises:
+            RuntimeError: Failed to get region list from PIA
+            ValueError: Received region list appears incorrect
+
+        Returns:
+            dict[str, dict]: Dict of regions, keys are region ids
+        """
+        stored = self._getStoredRegions()
+        if stored:
+            return stored
+
+        logger.info("Fetching new region list")
+        resp = requests.get(self.REGION_ADDRESS)
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"Failed to get region info file. ({ resp.status_code })"
             )
-            return token["token"]
-    except FileNotFoundError:
-        logger.debug(f"{ TOKEN_FILE } not found")
-        pass
-    else:
-        os.remove(TOKEN_FILE)
-
-    logger.info(f'Fetching new token for user "{ creds["user"] }".')
-    req = requests.get(TOKEN_ADDRESS, auth=(creds["user"], creds["pass"]))
-    data = req.json()
-    if data["status"] != "OK":
-        raise RuntimeError(f'Failed to get token ({ data["message"] })')
-
-    token = {
-        "time": time.time(),
-        "token": data["token"],
-        "user": creds["user"],
-    }
-    logger.info(f'Got token "{ token["token"][:10] }..."')
-    with open(TOKEN_FILE, "w+") as token_file:
-        json.dump(token, token_file)
-    return token["token"]
-
-
-def getRegionInfo(region: str) -> dict:
-    """Get the server info for a given server region.
-
-    Args:
-        region (str): ID of region to get info of.
-
-    Returns:
-        dict: Region server info including name, IPs, hostnames, and port.
-    """
-    regions = _getRegions()
-    raw_info = next(item for item in regions["regions"] if item["id"] == region)
-    region_info = {
-        "name": raw_info["name"],
-        "servers": raw_info["servers"]["wg"],
-        "port": regions["groups"]["wg"][0]["ports"][0],
-    }
-    return region_info
-
-
-def authenticate(region_info: dict, token: str, pubkey: str, ip_id: int = 0) -> dict:
-    """Attempt to authenticate a Wireguard pubkey with a PIA server, and get the
-    connection info if successful.
-
-    Args:
-        region_info (dict): Server to authenticate with.
-        token (str): PIA auth token to use.
-        pubkey (str): Wireguard client pubkey to authenticate.
-        ip_id (int, optional): Index of server to use. Defaults to 0.
-
-    Raises:
-        RuntimeError: Failed to authenticate.
-
-    Returns:
-        dict: Connection info required to generate a Wireguard config.
-    """
-    if not os.path.exists(SSL_CERT_FILE):
-        logger.info("Downloading PIA SSL certificate.")
-        cert = requests.get(SSL_CERT_ADDRESS).text
-        with open(SSL_CERT_FILE, "w+") as cert_file:
-            cert_file.write(cert)
-
-    server = region_info["servers"][ip_id]
-
-    logger.info(
-        f'Attempting to authenticate key "{ pubkey }" on server '
-        f'{ server["cn"] } ({ server["ip"] })'
-    )
-    sess = requests.Session()
-    sess.mount("https://", host_adapter.HostHeaderSSLAdapter())
-    req = sess.get(
-        f"https://{ server['ip'] }:{ region_info['port'] }/addKey",
-        verify=SSL_CERT_FILE,
-        params={"pt": token, "pubkey": pubkey},
-        headers={"Host": server["cn"]},
-    )
-
-    data = req.json()
-    if data["status"] != "OK":
-        raise RuntimeError(f'Failed to authenticate key ({ data["message"] })')
-
-    connection_info = {
-        "address": data["peer_ip"],
-        "dns": data["dns_servers"],
-        "pubkey": data["server_key"],
-        "host": server["cn"],
-        "endpoint": f"{ data['server_ip'] }:{ str(data['server_port']) }",
-    }
-    return connection_info
-
-
-def printRegions() -> None:
-    """Print a list of all server regions and whether or not they support port
-    forwarding.
-    """
-    regions = sorted(_getRegions()["regions"], key=lambda d: d["id"])
-    print("Listing all regions. (*) means regions supports port forwarding.\n")
-    print("  Region ID             Region Name")
-    print("---------------------------------------------")
-    for region in regions:
-        print(
-            f'{ "*" if region["port_forward"] else " " } { region["id"] :22}'
-            f'{ region["name"] }'
-        )
-
-
-def _getRegions() -> dict:
-    """Get a list of all server regions. Uses a cached region file, and replaces
-    it if stale.
-
-    Raises:
-        RuntimeError: Failed to get region info from server.
-        ValueError: Region info received appears to be invalid.
-
-    Returns:
-        dict: All server regions.
-    """
-    stale = True
-    try:
-        with open(REGION_FILE, "r") as region_file:
-            regions = json.load(region_file)
-
-        exp_time = regions["time"] + REGION_LIFE_SECONDS
-        now_time = time.time()
-        if exp_time > now_time:
-            logger.debug("Found valid region file")
-            stale = False
-    except FileNotFoundError:
-        pass
-
-    if stale:
-        logger.info(f"Fetching new region info file.")
-        req = requests.get(REGION_ADDRESS)
-        if req.status_code != 200:
-            raise RuntimeError(f"Failed to get region info file. ({ req.status_code })")
-        if len(req.text) < 1000:
+        if len(resp.text) < 1000:
             raise ValueError(f"Region info file is suspiciously short.")
-        regions = json.loads(req.text.splitlines()[0])
-        regions["time"] = time.time()
 
-        with open(REGION_FILE, "w+") as region_file:
-            json.dump(regions, region_file)
+        raw_regions = json.loads(resp.text.splitlines()[0])
+        regions = {}
+        for item in raw_regions["regions"]:
+            regions[item["id"]] = {
+                "name": item["name"],
+                "port_forward": item["port_forward"],
+                "servers": [
+                    (server["cn"], server["ip"]) for server in item["servers"]["wg"]
+                ],
+            }
+        regions["expiry_time"] = time.time() + self.REGION_LIFE_SECONDS
+        data = self._loadData()
+        data["regions"] = regions
+        self._saveData(data)
+        return regions
 
-    return regions
+    def authenticate(
+        self, region: str, pubkey: str, server_id: int = 0
+    ) -> dict[str, str]:
+        """Authenticate a Wireguard public key on a PIA server.
+
+        Args:
+            region (str): Server region id to authenticate with
+            pubkey (str): Wireguard pubkey to authenticate
+            server_id (int, optional): Server IP index. Defaults to 0.
+
+        Raises:
+            ValueError: Invalid region id
+            RuntimeError: Authentication failed
+
+        Returns:
+            dict[str, str]: Connection info required to configure Wireguard
+        """
+        if not os.path.exists("ca.rsa.4096.crt"):
+            logger.info("Downloading PIA SSL certificate.")
+            with open("ca.rsa.4096.crt", "w+") as cert_file:
+                cert_file.write(requests.get(self.SSL_CERT_ADDRESS).text)
+
+        regions = self.regions()
+        if region not in regions:
+            raise ValueError(f'Region ID "{region}" not found')
+
+        sess = requests.Session()
+        sess.mount("https://", host_adapter.HostHeaderSSLAdapter())
+        resp = sess.get(
+            f"https://{ regions[region]['servers'][server_id][1] }:1337/addKey",
+            verify="ca.rsa.4096.crt",
+            params={"pt": self.token(), "pubkey": pubkey},
+            headers={"Host": regions[region]["servers"][server_id][0]},
+        ).json()
+
+        if resp["status"] != "OK":
+            raise RuntimeError(f"Failed to authenticate ({resp['message']})")
+
+        connection_info = {
+            "address": resp["peer_ip"],
+            "dns": resp["dns_servers"][0],
+            "pubkey": resp["server_key"],
+            "host": regions[region]["servers"][server_id][0],
+            "endpoint": f"{ resp['server_ip'] }:{ str(resp['server_port']) }",
+        }
+        return connection_info
+
+    def _loadData(self) -> dict[str, Any]:
+        if not os.path.exists(self.data_file):
+            with open(self.data_file, "w+") as f:
+                f.write("{}\n")
+
+        with open(self.data_file, "r") as f:
+            return json.load(f)
+
+    def _saveData(self, data: dict[str, Any]):
+        with open(self.data_file, "w+") as f:
+            json.dump(data, f)
+
+    def _getStoredToken(self) -> str:
+        data = self._loadData()
+        if "token" not in data:
+            logger.debug("No stored token found")
+        elif data["token"]["user"] != self.username:
+            logger.debug("Stored token is for a different user")
+        elif data["token"]["expiry_time"] < time.time():
+            logger.debug("Stored token is stale")
+        else:
+            valid_m = int((data["token"]["expiry_time"] - time.time()) / 60)
+            logger.debug(f"Valid token found (good for {valid_m} more minute(s))")
+            return data["token"]["key"]
+        return ""
+
+    def _getStoredRegions(self) -> dict[str, dict]:
+        data = self._loadData()
+        if "regions" not in data:
+            logger.debug("No stored regions found")
+        elif data["regions"]["expiry_time"] < time.time():
+            logger.debug("Stored regions are stale")
+        else:
+            valid_m = int((data["regions"]["expiry_time"] - time.time()) / 60)
+            logger.debug(f"Stored regions found (good for {valid_m} more minute(s))")
+            return data["regions"]
+        return []

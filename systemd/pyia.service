@@ -1,0 +1,11 @@
+[Unit]
+Description=Setup and maintain PIA VPN connection
+
+[Service]
+User=root
+Group=root
+Type=oneshot
+SyslogIdentifier=PyIA
+
+WorkingDirectory=/opt/PyIA
+ExecStart=/opt/PyIA/bin/python3 pyia.py -c config.yml

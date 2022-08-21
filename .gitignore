@@ -137,3 +137,5 @@ regions.json
 connection.json
 ca.rsa.4096.crt
 config.yml
+
+.vscode/
