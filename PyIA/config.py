@@ -48,7 +48,13 @@ parser.add_argument("-L", "--log-level", help="Application output logging level"
 parser.add_argument("-l", "--list-regions", action="store_true", help="List regions")
 
 
-def get():
+def get() -> dict:
+    """Combine configuration options from CLI flagsm environment variables and
+    a config file.
+
+    Returns:
+        dict: Populated copy of CONFIG_DICT
+    """
     config = CONFIG_DICT
     cli_args = vars(parser.parse_args())
     if cli_args["list_regions"]:

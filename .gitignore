@@ -25,7 +25,9 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+bin/
 MANIFEST
+lib64
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -109,6 +111,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+pyvenv.cfg
 
 # Spyder project settings
 .spyderproject
@@ -131,5 +134,6 @@ dmypy.json
 # Files generated or downloaded by script
 token.json
 regions.json
+connection.json
 ca.rsa.4096.crt
 config.yml
