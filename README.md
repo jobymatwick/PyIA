@@ -18,12 +18,10 @@ The general installation steps for a Debian-based system are included below.
 Other distros will likely require similar steps.
 
 ### Requirements
-- `python3`
-- `python3-venv`
-- `python3-pip`
-- `git`
+- Python 3.9+
 - `wg-quick` (from `wireguard` package)
-- On Debian-based systems you may need to run `sudo sudo ln -s /usr/bin/resolvectl
+
+**NOTE:** On Debian-based systems you may need to run `sudo sudo ln -s /usr/bin/resolvectl
   /usr/local/bin/resolvconf` for `wg-quick` to work properly
 
 1. Clone this repo:
