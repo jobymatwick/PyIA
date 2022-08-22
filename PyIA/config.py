@@ -17,12 +17,14 @@
 # this program. If not, see <http://www.gnu.org/licenses/>.
 
 import argparse
-import yaml
+import logging
 import os
 import sys
-import logging
-from . import pia_api
+import yaml
 
+from .pia_api import PiaApi
+
+FALSY_STRINGS = ["false", "f", "no", "0"]
 CONFIG_DICT = {
     "region": None,
     "username": None,
@@ -48,17 +50,26 @@ parser.add_argument("-L", "--log-level", help="Application output logging level"
 parser.add_argument("-l", "--list-regions", action="store_true", help="List regions")
 
 
-def get() -> dict:
-    """Combine configuration options from CLI flagsm environment variables and
+def config(args: list) -> dict:
+    """Combine configuration options from CLI flags, environment variables, and
     a config file.
 
     Returns:
         dict: Populated copy of CONFIG_DICT
     """
     config = CONFIG_DICT
-    cli_args = vars(parser.parse_args())
+    cli_args = vars(parser.parse_args(args))
     if cli_args["list_regions"]:
-        pia_api.printRegions()
+        regions = dict(sorted(PiaApi("", "").regions().items()))
+        regions.pop("expiry_time")
+        print("Listing all regions. (*) means regions supports port forwarding.\n")
+        print("  Region ID             Region Name")
+        print("---------------------------------------------")
+        for region in regions.keys():
+            print(
+                f'{"*" if regions[region]["port_forward"] else " "} {region:22}'
+                f'{regions[region]["name"]}'
+            )
         sys.exit(0)
 
     if cli_args["config"]:
@@ -77,7 +88,11 @@ def get() -> dict:
         if key in cli_args and cli_args[key]:
             config[key] = cli_args[key]
         elif ("PYIA_" + key.upper()) in os.environ:
-            config[key] = os.environ["PYIA_" + key.upper()]
+            env = os.environ["PYIA_" + key.upper()]
+            if key == "port_forward":
+                config[key] = False if env.lower() in FALSY_STRINGS else True
+            else:
+                config[key] = env
         elif cli_args["config"] and key in conf_args:
             config[key] = conf_args[key]
 
