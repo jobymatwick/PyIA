@@ -31,7 +31,9 @@ SAMPLE_REGIONS = {
             "port_forward": True,
             "servers": {
                 "wg": [{"ip": f"{j}.{j}.{j}.{j}", "cn": f"host{j}"} for j in range(3)]
-            },
+            }
+            if i != 1
+            else {},
         }
         for i in range(100)
     ]
@@ -133,7 +135,7 @@ class TestPiaApi:
     def test_returnsNewRegions(self, requests_mock: Mocker):
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
         regions = self.api.regions()
-        assert len(regions) == 101
+        assert len(regions) == len(SAMPLE_REGIONS["regions"])
 
     def test_savesRegions(self, requests_mock: Mocker):
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
@@ -168,6 +170,9 @@ class TestPiaApi:
         assert self.api._getStoredRegions() == []
 
     def test_downloadsCert(self, requests_mock: Mocker):
+        with open("tests/test_cert.crt", "r") as test_cert:
+            cert_text = test_cert.read()
+        requests_mock.get(self.api.SSL_CERT_ADDRESS, text=cert_text)
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
         open("ca.rsa.4096.crt", "a").close()
         os.remove("ca.rsa.4096.crt")
@@ -176,6 +181,9 @@ class TestPiaApi:
         except Exception:
             pass
         assert os.path.exists("ca.rsa.4096.crt")
+
+        with open("ca.rsa.4096.crt", "r") as cert_file:
+            assert cert_file.read() == cert_text
 
     def test_authenticateInvalidRegion(self, requests_mock: Mocker):
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)

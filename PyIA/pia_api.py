@@ -98,6 +98,8 @@ class PiaApi:
         raw_regions = json.loads(resp.text.splitlines()[0])
         regions = {}
         for item in raw_regions["regions"]:
+            if 'wg' not in item['servers']:
+                continue
             regions[item["id"]] = {
                 "name": item["name"],
                 "port_forward": item["port_forward"],
@@ -156,6 +158,7 @@ class PiaApi:
             "host": regions[region]["servers"][server_id][0],
             "endpoint": f"{ resp['server_ip'] }:{ str(resp['server_port']) }",
         }
+        logger.info(f"Authenticated {connection_info['pubkey']} on {connection_info['host']}")
         return connection_info
 
     def _loadData(self) -> dict[str, Any]:

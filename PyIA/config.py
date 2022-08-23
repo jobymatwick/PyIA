@@ -20,6 +20,7 @@ import argparse
 import logging
 import os
 import sys
+from typing import Any
 import yaml
 
 from .pia_api import PiaApi
@@ -50,7 +51,7 @@ parser.add_argument("-L", "--log-level", help="Application output logging level"
 parser.add_argument("-l", "--list-regions", action="store_true", help="List regions")
 
 
-def config(args: list) -> dict:
+def config(args: list) -> dict[str, Any]:
     """Combine configuration options from CLI flags, environment variables, and
     a config file.
 

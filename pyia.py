@@ -20,22 +20,11 @@ Wireguard VPN connections."""
 import logging
 import sys
 
-import PyIA.config
-import PyIA.pia_api
-import PyIA.wireguard
+from PyIA import config
+from PyIA import updateConnection
 
 if __name__ == "__main__":
-    conf = PyIA.config.get()
+    conf = config(sys.argv[1:])
     logging.basicConfig(level=conf['log_level'].upper(), stream=sys.stdout)
-
-    if not PyIA.wireguard.checkConfig():
-        token = PyIA.pia_api.getToken({'user': conf['username'], 'pass': conf['password']})
-        region = PyIA.pia_api.getRegionInfo(conf['region'])
-        keypair = PyIA.wireguard.createKeypair()
-        conn_info = PyIA.pia_api.authenticate(region, token, keypair['pubkey'])
-        PyIA.wireguard.createConfig(conn_info, keypair['prikey'])
-
-    if not PyIA.wireguard.checkInterface():
-        PyIA.wireguard.connect()
-
-    PyIA.wireguard.checkConnection()
+    connected = updateConnection(conf)
+    sys.exit(0 if connected else 1)

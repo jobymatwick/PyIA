@@ -122,7 +122,7 @@ def test_configPresent(mocker: MockPytest):
     wireguard.createConfig(TEST_CONN_INFO, "biglongprivatekey=")
 
     status = wireguard.checkConfig()
-    os.remove("pia.conf")
+    wireguard.removeConfig()
     assert status == True
 
 

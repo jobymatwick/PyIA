@@ -110,9 +110,13 @@ def checkConfig() -> bool:
         bool: True if pia.conf is present.
     """
     present = os.path.exists(os.path.join(WIREGUARD_DIR, "pia.conf"))
-    logger.debug(f"Wireguard config is { '' if present else 'not' } present.")
+    logger.debug(f"Wireguard config is{'' if present else ' not'} present.")
     return present
 
+def removeConfig() -> None:
+    if checkConfig():
+        os.remove(os.path.join(WIREGUARD_DIR, "pia.conf"))
+        logger.debug("Removed wireguard config")
 
 def checkInterface() -> bool:
     """Check if Wireguard interface is active.
