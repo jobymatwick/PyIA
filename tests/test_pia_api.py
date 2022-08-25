@@ -21,7 +21,7 @@ import pytest
 from requests_mock.mocker import Mocker
 import time
 
-from PyIA import PiaApi
+from PyIA import PiaApi, ApiException
 
 SAMPLE_REGIONS = {
     "regions": [
@@ -58,7 +58,7 @@ class TestPiaApi:
             self.api.TOKEN_ADDRESS,
             json={"status": "ERROR", "message": "error message"},
         )
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ApiException):
             self.api.token()
 
     def test_returnsNewToken(self, requests_mock: Mocker):
@@ -124,12 +124,12 @@ class TestPiaApi:
 
     def test_checksRegionResp(self, requests_mock: Mocker):
         requests_mock.get(self.api.REGION_ADDRESS, status_code=403)
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ApiException):
             self.api.regions()
 
     def test_checksRegionRespLen(self, requests_mock: Mocker):
         requests_mock.get(self.api.REGION_ADDRESS, text="abc123")
-        with pytest.raises(ValueError):
+        with pytest.raises(ApiException):
             self.api.regions()
 
     def test_returnsNewRegions(self, requests_mock: Mocker):
@@ -197,7 +197,7 @@ class TestPiaApi:
             "https://0.0.0.0:1337/addKey",
             json={"status": "ERROR", "message": "error message"},
         )
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ApiException):
             self.api.authenticate("testid0", "")
 
     def test_returnsConnInfo(self, requests_mock: Mocker):

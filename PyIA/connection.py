@@ -38,7 +38,7 @@ def updateConnection(config: dict[str, Any]) -> bool:
                 keypair = wireguard.createKeypair()
                 conn_info = api.authenticate(config["region"], keypair["pubkey"])
                 wireguard.createConfig(conn_info, keypair["prikey"])
-            except RuntimeError or ValueError as e:
+            except pia_api.ApiException or ValueError as e:
                 logger.error(f"Auth error: {str(e)}")
                 continue
 
