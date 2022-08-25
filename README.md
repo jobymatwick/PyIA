@@ -22,6 +22,6 @@ Features include:
 
 ## Setup and Usage
 Installation instructions are included in the wiki
-[here](https://https://github.com/jobymatwick/PyIA/wiki/Setup). Configuration
+[here](https://github.com/jobymatwick/PyIA/wiki/Setup). Configuration
 and usage instructions can be found
-[here](https://https://github.com/jobymatwick/PyIA/wiki/Configuration-and-Usage).
+[here](https://github.com/jobymatwick/PyIA/wiki/Configuration-and-Usage).

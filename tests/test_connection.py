@@ -24,10 +24,15 @@ from .test_wireguard import TEST_CONN_INFO
 
 TEST_PAIR = {"pubkey": "pubkey", "prikey": "prikey"}
 
+class MockData:
+    def storeSuccess(self):
+        pass
 
 class MockPiaApi:
+
     def __init__(self, fails: int):
         self.fails = fails
+        self.data = MockData()
 
     def authenticate(self, *args):
         if self.fails:

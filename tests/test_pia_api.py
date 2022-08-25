@@ -273,3 +273,7 @@ class TestPiaApi:
         self.api.authenticate("testid0", "")
         with pytest.raises(PyIA.ApiException):
             self.api.portForward()
+
+    def test_storeSuccess(self):
+        self.api.storeSuccess()
+        assert self.api.data.last_success == int(time.time())

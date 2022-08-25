@@ -20,10 +20,12 @@ import argparse
 import logging
 import os
 import sys
+import time
 from typing import Any
 import yaml
 
 from .pia_api import PiaApi
+from . import wireguard
 
 FALSY_STRINGS = ["false", "f", "no", "0"]
 CONFIG_DICT = {
@@ -48,6 +50,7 @@ parser.add_argument("-r", "--region", help="ID of server region to connect to")
 parser.add_argument("-P", "--port-forward", action="store_true", help="Forward port")
 parser.add_argument("-q", "--port-forward-command", help="Run when port changes")
 parser.add_argument("-L", "--log-level", help="Application output logging level")
+parser.add_argument("-s", "--status", action="store_true", help="Get connection status")
 parser.add_argument("-l", "--list-regions", action="store_true", help="List regions")
 
 
@@ -61,16 +64,26 @@ def config(args: list) -> dict[str, Any]:
     config = CONFIG_DICT
     cli_args = vars(parser.parse_args(args))
     if cli_args["list_regions"]:
-        regions = dict(sorted(PiaApi("", "").regions().items()))
-        regions.pop("expiry_time")
+        regions = PiaApi("", "").regions()
         print("Listing all regions. (*) means regions supports port forwarding.\n")
         print("  Region ID             Region Name")
         print("---------------------------------------------")
-        for region in regions.keys():
-            print(
-                f'{"*" if regions[region]["port_forward"] else " "} {region:22}'
-                f'{regions[region]["name"]}'
-            )
+        for region in regions:
+            print(f'{"*" if region.port_forward else " "} {region.id:22}{region.name}')
+        sys.exit(0)
+    elif cli_args["status"]:
+        config_present = wireguard.checkConfig()
+        print(f"Wireguard configuration is {'pre' if config_present else 'ab'}sent")
+        if config_present:
+            ip = wireguard._loadConfig().endpoint.ip
+            print(f"Public IP should be {ip}")
+        interface_state = wireguard.checkInterface()
+        print(f"Wireguard network interface is {'up' if interface_state else 'down'}")
+        connected = wireguard.checkConnection() if interface_state else False
+        print(f"Wireguard connection is{'' if connected else ' not'} working\n")
+        last_success = PiaApi("", "").data.last_success
+        message = f"{((time.time() - last_success) / 60):.1f} minutes ago" if last_success else f"never"
+        print(f"Last successful refresh was {message}")
         sys.exit(0)
 
     if cli_args["config"]:

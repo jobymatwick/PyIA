@@ -16,12 +16,10 @@
 # You should have received a copy of the GNU General Public License along with
 # this program. If not, see <http://www.gnu.org/licenses/>.
 
-import base64
 import json
 import logging
 import os
 import subprocess
-from typing import Any
 import requests
 import requests_toolbelt.adapters.host_header_ssl as host_adapter
 import time
@@ -49,7 +47,7 @@ class PiaApi:
         self.data_file = data_file
         try:
             data = vpn_data.load(self.data_file)
-            if data.username == username:
+            if data.username == username or not username:
                 self.data = data
             else:
                 logger.info("Saved VPN data does not match current user.")
@@ -200,6 +198,9 @@ class PiaApi:
             logger.info(f'Running "{command_str}"')
             subprocess.check_output(command_str.split(" "))
             logger.info("Port change command ran")
+
+    def storeSuccess(self) -> None:
+        self.data.last_success = int(time.time())
 
     def _sslGet(
         self, port: int, path: str, params: dict[str, str]

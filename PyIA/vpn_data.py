@@ -77,6 +77,7 @@ class PersistentData(yaml.YAMLObject):
     port: int = None
     signature: str = None
     payload: str = None
+    last_success: int = 0
 
     def tokenValid(self) -> bool:
         not_expired = time.time() < self.token_expiry

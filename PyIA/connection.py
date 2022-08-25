@@ -50,6 +50,7 @@ def updateConnection(config: dict[str, Any]) -> bool:
         if connected:
             logger.info(f"Successfully connected on attempt {i}")
             api.portForward(config["port_forward_command"])
+            api.data.storeSuccess()
             break
         else:
             wireguard.removeConfig()

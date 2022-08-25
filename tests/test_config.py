@@ -23,6 +23,8 @@ import yaml
 
 from PyIA import PiaApi
 from PyIA import config
+from PyIA import vpn_data
+from .test_wireguard import TEST_CONN_INFO
 
 TEST_CONF = {
     "username": "user",
@@ -35,7 +37,7 @@ TEST_CONF = {
 
 
 def mock_regions(arg):
-    return {"testid": {"name": "testname", "port_forward": True}, "expiry_time": 0}
+    return [vpn_data.Region("testid", "name", True, [])]
 
 
 def test_allConf():
@@ -66,6 +68,20 @@ def test_listRegions(capfd):
     assert e.value.code == 0
     assert "Listing all regions" in out[0]
     assert "* testid" in out[0]
+
+
+def test_showStatus(capfd):
+    with pytest.raises(SystemExit) as e:
+        with mock.patch("PyIA.wireguard.WIREGUARD_DIR", ""):
+            with mock.patch("PyIA.wireguard.checkConfig", return_value=True):
+                with mock.patch(
+                    "PyIA.wireguard._loadConfig", return_value=TEST_CONN_INFO
+                ):
+                    config(["-s"])
+    out = capfd.readouterr()
+    assert e.value.code == 0
+    assert "Wireguard configuration is present" in out[0]
+    assert "Public IP should be 9.8.7.6" in out[0]
 
 
 def test_EnvOverrideConf():
