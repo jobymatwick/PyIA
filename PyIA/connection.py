@@ -26,15 +26,16 @@ CONNECTION_ATTEMPTS = 3
 
 logger = logging.getLogger(__name__)
 
+
 def updateConnection(config: dict[str, Any]) -> bool:
     connected = False
 
     for i in range(CONNECTION_ATTEMPTS):
         logger.info(f"Starting connection attempt {i + 1}...")
+        api = pia_api.PiaApi(config["username"], config["password"])
         if not wireguard.checkConfig():
             try:
                 logger.info("Generating a new config")
-                api = pia_api.PiaApi(config["username"], config["password"])
                 keypair = wireguard.createKeypair()
                 conn_info = api.authenticate(config["region"], keypair["pubkey"])
                 wireguard.createConfig(conn_info, keypair["prikey"])
@@ -48,6 +49,7 @@ def updateConnection(config: dict[str, Any]) -> bool:
 
         if connected:
             logger.info(f"Successfully connected on attempt {i}")
+            api.portForward(config["port_forward_command"])
             break
         else:
             wireguard.removeConfig()

@@ -22,6 +22,8 @@ import subprocess
 import requests
 import logging
 
+from . import vpn_data
+
 WIREGUARD_DIR = "/etc/wireguard"
 NETWORK_IF_DIR = "/sys/class/net/"
 IP_CHECK_URL = "https://api.ipify.org"
@@ -49,7 +51,7 @@ def createKeypair() -> dict[str, str]:
     return pair
 
 
-def createConfig(connection_info: dict, prikey: str) -> None:
+def createConfig(connection_info: vpn_data.Connection, prikey: str) -> None:
     """Create a Wireguard configuration file.
 
     Args:
@@ -58,16 +60,16 @@ def createConfig(connection_info: dict, prikey: str) -> None:
     """
     config = (
         f"[Interface]\n"
-        f'Address = { connection_info["address"] }\n'
-        f"PrivateKey = { prikey }\n"
-        f'DNS = { connection_info["dns"] }\n'
+        f"Address = {connection_info.ip}\n"
+        f"PrivateKey = {prikey}\n"
+        f"DNS = {connection_info.dns[0]}\n"
         f"\n"
         f"[Peer]\n"
         f"PersistentKeepalive = 25\n"
-        f'PublicKey = { connection_info["pubkey"] }\n'
+        f"PublicKey = {connection_info.server_key}\n"
         f"AllowedIPs = 0.0.0.0/0\n"
-        f'Endpoint = { connection_info["endpoint"] }\n'
-        f'# Hostname = { connection_info["host"] }\n'
+        f"Endpoint = {connection_info.endpoint.ip}:{connection_info.port}\n"
+        f"# Hostname = {connection_info.endpoint.hostname}\n"
     )
 
     with open(os.path.join(WIREGUARD_DIR, "pia.conf"), "w+") as wg_conf:
@@ -88,14 +90,14 @@ def checkConnection() -> bool:
     while not ip and retries:
         try:
             raw = requests.get(IP_CHECK_URL, timeout=3).content.decode("utf8")
-            ip = ".".join([str(octa) for octa in [int(i) for i in raw.split('.')]])
+            ip = ".".join([str(octa) for octa in [int(i) for i in raw.split(".")]])
         except Exception:
             retries = retries - 1
             logger.warning(f"Failed to get get public IP.")
     if not retries:
         return False
 
-    target_ip = _loadConfig()["endpoint"].split(":")[0]
+    target_ip = _loadConfig().endpoint.ip
     if ip == target_ip:
         logger.info("Connection OK")
     else:
@@ -113,10 +115,12 @@ def checkConfig() -> bool:
     logger.debug(f"Wireguard config is{'' if present else ' not'} present.")
     return present
 
+
 def removeConfig() -> None:
     if checkConfig():
         os.remove(os.path.join(WIREGUARD_DIR, "pia.conf"))
         logger.debug("Removed wireguard config")
+
 
 def checkInterface() -> bool:
     """Check if Wireguard interface is active.
@@ -138,19 +142,22 @@ def connect() -> bool:
     return True
 
 
-def _loadConfig() -> dict[str, str]:
+def _loadConfig() -> vpn_data.Connection:
     with open(os.path.join(WIREGUARD_DIR, "pia.conf"), "r") as config_file:
         config_str = config_file.read()
         config = configparser.ConfigParser()
         config.read_string(config_str)
 
-    connection_info = {
-        "address": config["Interface"]["Address"],
-        "dns": config["Interface"]["DNS"],
-        "pubkey": config["Peer"]["PublicKey"],
-        "host": next(host for host in config_str.splitlines() if "# Hostname" in host)
-        .split("=")[-1]
-        .strip(),
-        "endpoint": config["Peer"]["Endpoint"],
-    }
+    connection_info = vpn_data.Connection(
+        vpn_data.Host(
+            next(host for host in config_str.splitlines() if "# Hostname" in host)
+            .split("=")[-1]
+            .strip(),
+            config["Peer"]["Endpoint"].split(":")[0],
+        ),
+        config["Peer"]["Endpoint"].split(":")[-1],
+        config["Interface"]["Address"],
+        config["Peer"]["PublicKey"],
+        [config["Interface"]["DNS"]],
+    )
     return connection_info

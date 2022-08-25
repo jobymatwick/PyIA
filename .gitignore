@@ -132,7 +132,7 @@ dmypy.json
 .pyre/
 
 # Files generated or downloaded by script
-data.json
+data.yml
 ca.rsa.4096.crt
 config.yml
 

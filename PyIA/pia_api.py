@@ -26,6 +26,8 @@ import requests
 import requests_toolbelt.adapters.host_header_ssl as host_adapter
 import time
 
+from . import vpn_data
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,12 +41,21 @@ class PiaApi:
     REGION_LIFE_SECONDS = 43200  # 12 hours
     REGION_ADDRESS = "https://serverlist.piaservers.net/vpninfo/servers/v6"
     SSL_CERT_ADDRESS = "https://raw.githubusercontent.com/pia-foss/manual-connections/master/ca.rsa.4096.crt"
+    PORT_TEMPLATE = "{{PORT}}"
 
-    def __init__(self, username: str, password: str, data_file: str = "data.json"):
+    def __init__(self, username: str, password: str, data_file: str = "data.yml"):
         self.username = username
         self.password = password
         self.data_file = data_file
-        self._loadData()
+        try:
+            data = vpn_data.load(self.data_file)
+            if data.username == username:
+                self.data = data
+            else:
+                logger.info("Saved VPN data does not match current user.")
+                self.data = vpn_data.PersistentData()
+        except FileNotFoundError:
+            self.data = vpn_data.PersistentData()
 
     def token(self) -> str:
         """Get a PIA auth token. Use a stored value if it is OK, otherwise get
@@ -56,9 +67,8 @@ class PiaApi:
         Returns:
             str: PIA auth token
         """
-        stored = self._getStoredToken()
-        if stored:
-            return stored
+        if self.data.tokenValid():
+            return self.data.token
 
         logger.info(f"Fetching a new token for user {self.username}")
         resp = requests.get(
@@ -67,17 +77,15 @@ class PiaApi:
         if resp["status"] != "OK":
             raise ApiException(f"Failed to fetch token ({resp['message']})")
 
-        data = self._loadData()
-        data["token"] = {
-            "user": self.username,
-            "expiry_time": time.time() + self.TOKEN_LIFE_SECONDS,
-            "key": resp["token"],
-        }
-        self._saveData(data)
-        logger.info("Successfully got new token")
-        return data["token"]["key"]
+        self.data.token = resp["token"]
+        self.data.token_expiry = int(time.time() + self.TOKEN_LIFE_SECONDS)
+        self.data.username = self.username
 
-    def regions(self) -> dict[str, dict]:
+        logger.info("Successfully got new token")
+        vpn_data.save(self.data, self.data_file)
+        return self.data.token
+
+    def regions(self) -> list[vpn_data.Region]:
         """Get a list of PIA server regions. Uses a cached list and refreshes
         when stale.
 
@@ -85,42 +93,44 @@ class PiaApi:
             ApiException: Failed to get region list from PIA
 
         Returns:
-            dict[str, dict]: Dict of regions, keys are region ids
+            list[vpn_data.Region]: List of valid regions
         """
-        stored = self._getStoredRegions()
-        if stored:
-            return stored
+        if self.data.regionsValid():
+            return self.data.regions
 
         logger.info("Fetching new region list")
         resp = requests.get(self.REGION_ADDRESS)
         if resp.status_code != 200:
-            raise ApiException(
-                f"Failed to get region info file. ({ resp.status_code })"
-            )
+            raise ApiException(f"Failed to get region file. ({ resp.status_code })")
         if len(resp.text) < 1000:
             raise ApiException(f"Region info file is suspiciously short.")
 
         raw_regions = json.loads(resp.text.splitlines()[0])
-        regions = {}
+        self.data.regions: list[vpn_data.Region] = []
         for item in raw_regions["regions"]:
             if "wg" not in item["servers"]:
                 continue
-            regions[item["id"]] = {
-                "name": item["name"],
-                "port_forward": item["port_forward"],
-                "servers": [
-                    (server["cn"], server["ip"]) for server in item["servers"]["wg"]
-                ],
-            }
-        regions["expiry_time"] = time.time() + self.REGION_LIFE_SECONDS
-        data = self._loadData()
-        data["regions"] = regions
-        self._saveData(data)
-        return regions
+            self.data.regions.append(
+                vpn_data.Region(
+                    item["id"],
+                    item["name"],
+                    item["port_forward"],
+                    [
+                        vpn_data.Host(server["cn"], server["ip"])
+                        for server in item["servers"]["wg"]
+                    ],
+                )
+            )
+        self.data.regions_expiry = int(time.time() + self.REGION_LIFE_SECONDS)
+        self.data.regions.sort(key=lambda x: x.id)
+
+        logger.info("Successfully got updated region list")
+        vpn_data.save(self.data, self.data_file)
+        return self.data.regions
 
     def authenticate(
-        self, region: str, pubkey: str, server_id: int = 0
-    ) -> dict[str, str]:
+        self, region_id: str, pubkey: str, server_id: int = 0
+    ) -> vpn_data.Connection:
         """Authenticate a Wireguard public key on a PIA server.
 
         Args:
@@ -135,140 +145,73 @@ class PiaApi:
         Returns:
             dict[str, str]: Connection info required to configure Wireguard
         """
-        self._getCert()
+        try:
+            region = next(item for item in self.regions() if item.id == region_id)
+        except StopIteration:
+            raise ValueError(f'Region ID "{region_id}" not found')
 
-        regions = self.regions()
-        if region not in regions:
-            raise ValueError(f'Region ID "{region}" not found')
-
-        sess = requests.Session()
-        sess.mount("https://", host_adapter.HostHeaderSSLAdapter())
-        resp = sess.get(
-            f"https://{ regions[region]['servers'][server_id][1] }:1337/addKey",
-            verify="ca.rsa.4096.crt",
-            params={"pt": self.token(), "pubkey": pubkey},
-            headers={"Host": regions[region]["servers"][server_id][0]},
+        self.data.connection = vpn_data.Connection(region.servers[server_id])
+        resp = self._sslGet(
+            1337, "addKey", {"pt": self.token(), "pubkey": pubkey}
         ).json()
 
         if resp["status"] != "OK":
             raise ApiException(f"Failed to authenticate ({resp['message']})")
 
-        connection_info = {
-            "address": resp["peer_ip"],
-            "dns": resp["dns_servers"][0],
-            "pubkey": resp["server_key"],
-            "host": regions[region]["servers"][server_id][0],
-            "endpoint": f"{ resp['server_ip'] }:{ str(resp['server_port']) }",
-        }
-        logger.info(
-            f"Authenticated {connection_info['pubkey']} on {connection_info['host']}"
+        self.data.connection = vpn_data.Connection(
+            endpoint=region.servers[server_id],
+            port=int(resp["server_port"]),
+            ip=resp["peer_ip"],
+            server_key=resp["server_key"],
+            dns=resp["dns_servers"],
         )
-        return connection_info
 
-    def portForward(self, connection_info: dict[str, Any], command: str) -> bool:
-        signature, changed = self._getSignature(connection_info)
-        bound = self._bindPort(
-            signature,
-            connection_info["endpoint"].split(":")[0],
-            connection_info["host"],
-        )
-        if bound and changed:
-            subprocess.check_output(command.split(" "))
+        logger.info(f"Authenticated on {self.data.connection.endpoint.hostname}")
+        vpn_data.save(self.data, self.data_file)
+        return self.data.connection
+
+    def portForward(self, command: str = None) -> None:
+        new_port = False
+        if not self.data.payloadValid():
+            resp = self._sslGet(19999, "getSignature", {"token": self.token()}).json()
+            if resp["status"] != "OK":
+                raise ApiException(f"Failed to get signature ({resp['message']})")
+            self.data.signature = resp["signature"]
+            self.data.payload = resp["payload"]
+            if not self.data.payloadValid():
+                raise ApiException("Got an invalid signature")
+            new_port = True
+
+        port = self.data.portFromPayload()
+        logger.info(f"Binding port {port}")
+        resp = self._sslGet(
+            19999,
+            "bindPort",
+            {"payload": self.data.payload, "signature": self.data.signature},
+        ).json()
+
+        if resp["status"] != "OK":
+            raise ApiException(f"Failed to bind port ({resp['message']})")
+        logger.info("Port bound successfully")
+        vpn_data.save(self.data, self.data_file)
+
+        if new_port and command:
+            command_str = command.replace(self.PORT_TEMPLATE, str(port))
+            logger.info(f'Running "{command_str}"')
+            subprocess.check_output(command_str.split(" "))
             logger.info("Port change command ran")
-        return bound
 
-    def _loadData(self) -> dict[str, Any]:
-        if not os.path.exists(self.data_file):
-            with open(self.data_file, "w+") as f:
-                f.write("{}\n")
+    def _sslGet(
+        self, port: int, path: str, params: dict[str, str]
+    ) -> requests.Response:
+        if not os.path.exists("ca.rsa.4096.crt"):
+            logger.info("Downloading PIA SSL certificate.")
+            with open("ca.rsa.4096.crt", "w+") as cert_file:
+                cert_file.write(requests.get(self.SSL_CERT_ADDRESS).text)
 
-        with open(self.data_file, "r") as f:
-            return json.load(f)
-
-    def _saveData(self, data: dict[str, Any]):
-        with open(self.data_file, "w+") as f:
-            json.dump(data, f)
-
-    def _getStoredToken(self) -> str:
-        data = self._loadData()
-        if "token" not in data:
-            logger.debug("No stored token found")
-        elif data["token"]["user"] != self.username:
-            logger.debug("Stored token is for a different user")
-        elif data["token"]["expiry_time"] < time.time():
-            logger.debug("Stored token is stale")
-        else:
-            valid_m = int((data["token"]["expiry_time"] - time.time()) / 60)
-            logger.debug(f"Valid token found (good for {valid_m} more minute(s))")
-            return data["token"]["key"]
-        return ""
-
-    def _getStoredRegions(self) -> dict[str, dict]:
-        data = self._loadData()
-        if "regions" not in data:
-            logger.debug("No stored regions found")
-        elif data["regions"]["expiry_time"] < time.time():
-            logger.debug("Stored regions are stale")
-        else:
-            valid_m = int((data["regions"]["expiry_time"] - time.time()) / 60)
-            logger.debug(f"Stored regions found (good for {valid_m} more minute(s))")
-            return data["regions"]
-        return []
-
-    def _getSignature(self, connection_info: dict[str, Any]) -> tuple[dict, bool]:
-        data = self._loadData()
-        if "signature" not in data:
-            logger.debug("No stored signature found")
-        elif data["signature"]["expiry_time"] < time.time():
-            logger.debug("Stored signature is stale")
-        else:
-            valid_h = int((data["signature"]["expiry_time"] - time.time()) / 3600 * 24)
-            logger.debug(f"Valid signature found (good for {valid_h} more days(s))")
-            return data["signature"], False
-
-        self._getCert()
         sess = requests.Session()
         sess.mount("https://", host_adapter.HostHeaderSSLAdapter())
-        resp = sess.get(
-            f"https://{connection_info['endpoint'].split(':')[0]}:19999/getSignature",
-            verify="ca.rsa.4096.crt",
-            params={"token": self.token()},
-            headers={"Host": connection_info["host"]},
-        ).json()
 
-        if resp["status"] != "OK":
-            raise RuntimeError(f"Failed to get signature ({resp['message']})")
-
-        stored = json.loads(base64.b64decode(resp["payload"]))
-        stored["signature"] = resp["signature"]
-        stored["payload"] = resp["payload"]
-        data = self._loadData()
-        data["signature"] = stored
-        self._saveData(data)
-        return data, True
-
-    def _getCert(self) -> None:
-        if os.path.exists("ca.rsa.4096.crt"):
-            return
-        logger.info("Downloading PIA SSL certificate.")
-        with open("ca.rsa.4096.crt", "w+") as cert_file:
-            cert_file.write(requests.get(self.SSL_CERT_ADDRESS).text)
-
-    def _bindPort(self, signature: dict[str, str], ip: str, host: str) -> bool:
-        logger.info(f"Binding port {signature['port']}")
-        sess = requests.Session()
-        sess.mount("https://", host_adapter.HostHeaderSSLAdapter())
-        resp = sess.get(
-            f"https://{ip}:19999/bindPort",
-            verify="ca.rsa.4096.crt",
-            params={
-                "payload": signature["payload"],
-                "signature": signature["signature"],
-            },
-            headers={"Host": host},
-        ).json()
-
-        if resp["status"] != "OK":
-            logger.error(f"Failed to bind port {resp['message']}")
-            return False
-        return True
+        url = f"https://{self.data.connection.endpoint.ip}:{port}/{path}"
+        headers = {"Host": self.data.connection.endpoint.hostname}
+        return sess.get(url, verify="ca.rsa.4096.crt", params=params, headers=headers)

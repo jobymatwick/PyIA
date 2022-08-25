@@ -25,7 +25,7 @@ from .test_wireguard import TEST_CONN_INFO
 TEST_PAIR = {"pubkey": "pubkey", "prikey": "prikey"}
 
 
-class DummyApi:
+class MockPiaApi:
     def __init__(self, fails: int):
         self.fails = fails
 
@@ -35,11 +35,14 @@ class DummyApi:
             raise PyIA.ApiException("Failed for test")
         return TEST_CONN_INFO
 
+    def portForward(self, command: str):
+        assert command == TEST_CONF["port_forward_command"]
+
 
 def test_blankConnectionOk(mocker: MockPytest):
     mocks: list[MockPytest] = []
     mocks.append(mocker.patch("PyIA.wireguard.checkConfig", return_value=False))
-    mocks.append(mocker.patch("PyIA.pia_api.PiaApi", return_value=DummyApi(0)))
+    mocks.append(mocker.patch("PyIA.pia_api.PiaApi", return_value=MockPiaApi(0)))
     mocks.append(mocker.patch("PyIA.wireguard.createKeypair", return_value=TEST_PAIR))
     mocks.append(mocker.patch("PyIA.wireguard.createConfig", return_value=None))
     mocks.append(mocker.patch("PyIA.wireguard.checkInterface", return_value=False))
@@ -55,7 +58,7 @@ def test_blankConnectionOk(mocker: MockPytest):
 def test_retriesAuthFails(mocker: MockPytest):
     mocks: list[MockPytest] = []
     mocks.append(mocker.patch("PyIA.wireguard.checkConfig", return_value=False))
-    mocks.append(mocker.patch("PyIA.pia_api.PiaApi", return_value=DummyApi(3)))
+    mocks.append(mocker.patch("PyIA.pia_api.PiaApi", return_value=MockPiaApi(3)))
     mocks.append(mocker.patch("PyIA.wireguard.createKeypair", return_value=TEST_PAIR))
 
     status = PyIA.updateConnection(TEST_CONF)
@@ -67,7 +70,7 @@ def test_retriesAuthFails(mocker: MockPytest):
 def test_retriesConnectionFails(mocker: MockPytest):
     mocks: list[MockPytest] = []
     mocks.append(mocker.patch("PyIA.wireguard.checkConfig", return_value=False))
-    mocks.append(mocker.patch("PyIA.pia_api.PiaApi", return_value=DummyApi(0)))
+    mocks.append(mocker.patch("PyIA.pia_api.PiaApi", return_value=MockPiaApi(0)))
     mocks.append(mocker.patch("PyIA.wireguard.createKeypair", return_value=TEST_PAIR))
     mocks.append(mocker.patch("PyIA.wireguard.createConfig", return_value=None))
     mocks.append(mocker.patch("PyIA.wireguard.checkInterface", return_value=False))
@@ -83,7 +86,7 @@ def test_retriesConnectionFails(mocker: MockPytest):
 def test_retriesAuthConnectionFails(mocker: MockPytest):
     mocks: list[MockPytest] = []
     mocks.append(mocker.patch("PyIA.wireguard.checkConfig", return_value=False))
-    mocks.append(mocker.patch("PyIA.pia_api.PiaApi", return_value=DummyApi(1)))
+    mocks.append(mocker.patch("PyIA.pia_api.PiaApi", return_value=MockPiaApi(1)))
     mocks.append(mocker.patch("PyIA.wireguard.createKeypair", return_value=TEST_PAIR))
     mocks.append(mocker.patch("PyIA.wireguard.createConfig", return_value=None))
     mocks.append(mocker.patch("PyIA.wireguard.checkInterface", return_value=False))
@@ -99,7 +102,7 @@ def test_retriesAuthConnectionFails(mocker: MockPytest):
 def test_retriesAuthConnectionOk(mocker: MockPytest):
     mocks: list[MockPytest] = []
     mocks.append(mocker.patch("PyIA.wireguard.checkConfig", return_value=False))
-    mocks.append(mocker.patch("PyIA.pia_api.PiaApi", return_value=DummyApi(1)))
+    mocks.append(mocker.patch("PyIA.pia_api.PiaApi", return_value=MockPiaApi(1)))
     mocks.append(mocker.patch("PyIA.wireguard.createKeypair", return_value=TEST_PAIR))
     mocks.append(mocker.patch("PyIA.wireguard.createConfig", return_value=None))
     mocks.append(mocker.patch("PyIA.wireguard.checkInterface", return_value=False))

@@ -16,13 +16,20 @@
 # You should have received a copy of the GNU General Public License along with
 # this program. If not, see <http://www.gnu.org/licenses/>.
 
+import base64
+import copy
+import datetime
+import json
 import os
 import pytest
-from requests_mock.mocker import Mocker
+from pytest_mock import MockFixture as MockPytest
+from requests_mock.mocker import Mocker as MockRequest
 import time
 
-from PyIA import PiaApi, ApiException
+from PyIA import PiaApi, ApiException, vpn_data
+import PyIA
 
+TEST_FILE = "test_api.yml"
 SAMPLE_REGIONS = {
     "regions": [
         {
@@ -31,29 +38,48 @@ SAMPLE_REGIONS = {
             "port_forward": True,
             "servers": {
                 "wg": [{"ip": f"{j}.{j}.{j}.{j}", "cn": f"host{j}"} for j in range(3)]
-            }
-            if i != 1
-            else {},
+            },
         }
         for i in range(100)
     ]
 }
 
+AUTH_RESPONSE = {
+    "status": "OK",
+    "peer_ip": "1.2.3.4",
+    "dns_servers": ["8.8.8.8"],
+    "server_key": "pubkey",
+    "server_ip": "9.8.7.6",
+    "server_port": "1337",
+}
+
+SIGNATURE_RESPONSE = {
+    "status": "OK",
+    "signature": "sig",
+    "payload": base64.b64encode(
+        json.dumps(
+            {
+                "signature": "sig",
+                "expires_at": (
+                    datetime.datetime.now() + datetime.timedelta(0, 600)
+                ).isoformat()
+                + "000Z",
+                "port": 12345,
+            }
+        ).encode()
+    ).decode("utf-8"),
+}
+
 
 class TestPiaApi:
     def setup_method(self):
-        self.api = PiaApi("username", "password", "test.json")
+        self.api = PiaApi("username", "password", TEST_FILE)
 
     def teardown_method(self):
-        if os.path.exists("test.json"):
-            os.remove("test.json")
+        if os.path.exists(TEST_FILE):
+            os.remove(TEST_FILE)
 
-    def test_classCreatesBlankDataFile(self):
-        assert os.path.exists("test.json")
-        with open("test.json") as f:
-            assert f.read() == "{}\n"
-
-    def test_checksTokenResp(self, requests_mock: Mocker):
+    def test_checksTokenResp(self, requests_mock: MockRequest):
         requests_mock.get(
             self.api.TOKEN_ADDRESS,
             json={"status": "ERROR", "message": "error message"},
@@ -61,115 +87,82 @@ class TestPiaApi:
         with pytest.raises(ApiException):
             self.api.token()
 
-    def test_returnsNewToken(self, requests_mock: Mocker):
+    def test_returnsNewToken(self, requests_mock: MockRequest):
         requests_mock.get(
             self.api.TOKEN_ADDRESS,
             json={"status": "OK", "token": "testtoken"},
         )
-        token_time = time.time()
         token = self.api.token()
         assert token == "testtoken"
 
-    def test_savesNewToken(self, requests_mock: Mocker):
-        requests_mock.get(
-            self.api.TOKEN_ADDRESS,
-            json={"status": "OK", "token": "testtoken"},
-        )
-        token_time = time.time()
-        self.api.token()
-        assert self.api._loadData()["token"]["key"] == "testtoken"
-
-    def test_savesNewTokenUser(self, requests_mock: Mocker):
+    def test_savesNewToken(self, requests_mock: MockRequest):
         requests_mock.get(
             self.api.TOKEN_ADDRESS,
             json={"status": "OK", "token": "testtoken"},
         )
         self.api.token()
-        assert self.api._loadData()["token"]["user"] == "username"
-
-    def test_savesNewTokenExpiry(self, requests_mock: Mocker):
-        requests_mock.get(
-            self.api.TOKEN_ADDRESS,
-            json={"status": "OK", "token": "testtoken"},
-        )
-        token_time = time.time()
-        self.api.token()
-        assert int(self.api._loadData()["token"]["expiry_time"]) == int(
-            token_time + self.api.TOKEN_LIFE_SECONDS
-        )
+        token_time = int(time.time())
+        loaded = vpn_data.load(TEST_FILE)
+        assert loaded.token == "testtoken"
+        assert loaded.username == "username"
+        assert loaded.token_expiry == token_time + self.api.TOKEN_LIFE_SECONDS
 
     def test_storedTokenOk(self):
-        self.api._saveData(
-            {
-                "token": {
-                    "user": "username",
-                    "expiry_time": time.time() + 1,
-                    "key": "key",
-                }
-            }
+        vpn_data.save(
+            vpn_data.PersistentData(token="key", token_expiry=int(time.time() + 1)),
+            TEST_FILE,
         )
+        self.api.data = vpn_data.load(TEST_FILE)
         assert self.api.token() == "key"
 
-    def test_storedTokenMissing(self):
-        assert self.api._getStoredToken() == ""
+    def test_fileIfUsernameMatch(self, requests_mock: MockRequest):
+        self.test_returnsNewToken(requests_mock)
+        api = PiaApi("username", "password", TEST_FILE)
+        assert api.data.token == "testtoken"
 
-    def test_storedTokenWrongUser(self):
-        self.api._saveData({"token": {"user": "wrong"}})
-        assert self.api._getStoredToken() == ""
+    def test_fileIfUsernameMismatch(self, requests_mock: MockRequest):
+        self.test_returnsNewToken(requests_mock)
+        api = PiaApi("othername", "password", TEST_FILE)
+        assert api.data.token == None
 
-    def test_storedTokenExpired(self):
-        t = time.time() - 1
-        self.api._saveData({"token": {"user": "username", "expiry_time": t}})
-        assert self.api._getStoredToken() == ""
-
-    def test_checksRegionResp(self, requests_mock: Mocker):
+    def test_checksRegionResp(self, requests_mock: MockRequest):
         requests_mock.get(self.api.REGION_ADDRESS, status_code=403)
         with pytest.raises(ApiException):
             self.api.regions()
 
-    def test_checksRegionRespLen(self, requests_mock: Mocker):
+    def test_checksRegionRespLen(self, requests_mock: MockRequest):
         requests_mock.get(self.api.REGION_ADDRESS, text="abc123")
         with pytest.raises(ApiException):
             self.api.regions()
 
-    def test_returnsNewRegions(self, requests_mock: Mocker):
+    def test_returnsNewRegions(self, requests_mock: MockRequest):
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
         regions = self.api.regions()
         assert len(regions) == len(SAMPLE_REGIONS["regions"])
 
-    def test_savesRegions(self, requests_mock: Mocker):
-        requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
+    def test_omitsNonWgRegion(self, requests_mock: MockRequest):
+        regions = copy.deepcopy(SAMPLE_REGIONS)
+        regions["regions"][1]["servers"].pop("wg")
+        requests_mock.get(self.api.REGION_ADDRESS, json=regions)
         regions = self.api.regions()
-        assert self.api._loadData()["regions"]["testid0"]["name"] == "testname0"
-        assert self.api._loadData()["regions"]["testid0"]["port_forward"] == True
-        assert self.api._loadData()["regions"]["testid0"]["servers"] == [
-            [f"host{j}", f"{j}.{j}.{j}.{j}"] for j in range(3)
-        ]
+        assert len(regions) == len(SAMPLE_REGIONS["regions"]) - 1
 
-    def test_savesNewRegionsExpiry(self, requests_mock: Mocker):
+    def test_savesRegions(self, requests_mock: MockRequest):
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
-        region_time = time.time()
+        request_time = int(time.time())
+        regions = self.api.regions()
+        loaded = vpn_data.load(TEST_FILE)
+        for i, region in enumerate(regions):
+            assert region == loaded.regions[i]
+        assert loaded.regions_expiry == request_time + self.api.REGION_LIFE_SECONDS
+
+    def test_storedRegionsOk(self, requests_mock: MockRequest):
+        mock = requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
         self.api.regions()
-        assert int(self.api._loadData()["regions"]["expiry_time"]) == int(
-            region_time + self.api.REGION_LIFE_SECONDS
-        )
+        self.api.regions()
+        assert mock.call_count == 1
 
-    def test_storedRegionsOk(self):
-        self.api._saveData(
-            {"regions": {"region": "stored", "expiry_time": time.time() + 1}}
-        )
-        assert self.api.regions()["region"] == "stored"
-
-    def test_storedRegionsMissing(self):
-        assert self.api._getStoredRegions() == []
-
-    def test_storedRegionsExpired(self):
-        self.api._saveData(
-            {"regions": {"region": "stored", "expiry_time": time.time() - 1}}
-        )
-        assert self.api._getStoredRegions() == []
-
-    def test_downloadsCert(self, requests_mock: Mocker):
+    def test_downloadsCert(self, requests_mock: MockRequest):
         with open("tests/test_cert.crt", "r") as test_cert:
             cert_text = test_cert.read()
         requests_mock.get(self.api.SSL_CERT_ADDRESS, text=cert_text)
@@ -177,7 +170,7 @@ class TestPiaApi:
         open("ca.rsa.4096.crt", "a").close()
         os.remove("ca.rsa.4096.crt")
         try:
-            self.api.authenticate("testid0", "")
+            self.api._sslGet(0, "", {})
         except Exception:
             pass
         assert os.path.exists("ca.rsa.4096.crt")
@@ -185,12 +178,12 @@ class TestPiaApi:
         with open("ca.rsa.4096.crt", "r") as cert_file:
             assert cert_file.read() == cert_text
 
-    def test_authenticateInvalidRegion(self, requests_mock: Mocker):
+    def test_authInvalidRegion(self, requests_mock: MockRequest):
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
         with pytest.raises(ValueError):
             self.api.authenticate("invalid", "")
 
-    def test_checksAuthResp(self, requests_mock: Mocker):
+    def test_checksAuthResp(self, requests_mock: MockRequest):
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
         requests_mock.get(self.api.TOKEN_ADDRESS, json={"status": "OK", "token": ""})
         requests_mock.get(
@@ -200,25 +193,83 @@ class TestPiaApi:
         with pytest.raises(ApiException):
             self.api.authenticate("testid0", "")
 
-    def test_returnsConnInfo(self, requests_mock: Mocker):
+    def test_authReturnsConnInfo(self, requests_mock: MockRequest):
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
         requests_mock.get(self.api.TOKEN_ADDRESS, json={"status": "OK", "token": ""})
-        requests_mock.get(
-            "https://0.0.0.0:1337/addKey",
-            json={
-                "status": "OK",
-                "peer_ip": "1.2.3.4",
-                "dns_servers": ["8.8.8.8"],
-                "server_key": "pubkey",
-                "server_ip": "9.8.7.6",
-                "server_port": "1337",
-            },
-        )
+        requests_mock.get("https://0.0.0.0:1337/addKey", json=AUTH_RESPONSE)
         conn_info = self.api.authenticate("testid0", "")
-        assert conn_info == {
-            "address": "1.2.3.4",
-            "dns": "8.8.8.8",
-            "pubkey": "pubkey",
-            "host": "host0",
-            "endpoint": "9.8.7.6:1337",
-        }
+        assert conn_info == vpn_data.Connection(
+            vpn_data.Host("host0", "0.0.0.0"), 1337, "1.2.3.4", "pubkey", ["8.8.8.8"]
+        )
+
+    def test_pfNoSavedNoCommand(self, requests_mock: MockRequest, mocker: MockPytest):
+        requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
+        requests_mock.get(self.api.TOKEN_ADDRESS, json={"status": "OK", "token": "key"})
+        requests_mock.get("https://0.0.0.0:1337/addKey", json=AUTH_RESPONSE)
+        requests_mock.get("https://0.0.0.0:19999/getSignature", json=SIGNATURE_RESPONSE)
+        requests_mock.get("https://0.0.0.0:19999/bindPort", json={"status": "OK"})
+        mock = mocker.patch("subprocess.run")
+        self.api.authenticate("testid0", "")
+        self.api.portForward()
+        loaded = vpn_data.load(TEST_FILE)
+        assert loaded.portFromPayload() == 12345
+        assert mock.call_count == 0
+
+    def test_pfNoSavedCommand(self, requests_mock: MockRequest, mocker: MockPytest):
+        requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
+        requests_mock.get(self.api.TOKEN_ADDRESS, json={"status": "OK", "token": "key"})
+        requests_mock.get("https://0.0.0.0:1337/addKey", json=AUTH_RESPONSE)
+        requests_mock.get("https://0.0.0.0:19999/getSignature", json=SIGNATURE_RESPONSE)
+        requests_mock.get("https://0.0.0.0:19999/bindPort", json={"status": "OK"})
+        mock = mocker.patch("subprocess.run")
+        mock.return_value.returncode = 0
+        self.api.authenticate("testid0", "")
+        self.api.portForward("cmd " + self.api.PORT_TEMPLATE)
+
+        assert mock.call_count == 1
+        assert mock.call_args.args[0] == ["cmd", "12345"]
+
+    def test_pfSaved(self, requests_mock: MockRequest, mocker: MockPytest):
+        self.test_pfNoSavedNoCommand(requests_mock, mocker)
+        mock = requests_mock.get(
+            "https://0.0.0.0:19999/bindPort", json={"status": "OK"}
+        )
+        subp = mocker.patch("subprocess.run")
+        self.api.portForward("cmd")
+        assert mock.call_count == 1
+        assert subp.call_count == 0
+
+    def test_pfNoSavedSigFail(self, requests_mock: MockRequest):
+        requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
+        requests_mock.get(self.api.TOKEN_ADDRESS, json={"status": "OK", "token": "key"})
+        requests_mock.get("https://0.0.0.0:1337/addKey", json=AUTH_RESPONSE)
+        requests_mock.get(
+            "https://0.0.0.0:19999/getSignature", json={"status": "err", "message": ""}
+        )
+        self.api.authenticate("testid0", "")
+        with pytest.raises(PyIA.ApiException):
+            self.api.portForward()
+
+    def test_pfNoSavedSigInvalid(self, requests_mock: MockRequest):
+        requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
+        requests_mock.get(self.api.TOKEN_ADDRESS, json={"status": "OK", "token": "key"})
+        requests_mock.get("https://0.0.0.0:1337/addKey", json=AUTH_RESPONSE)
+        requests_mock.get(
+            "https://0.0.0.0:19999/getSignature",
+            json={"status": "OK", "signature": "sig", "payload": "no"},
+        )
+        self.api.authenticate("testid0", "")
+        with pytest.raises(PyIA.ApiException):
+            self.api.portForward()
+
+    def test_pfBindFail(self, requests_mock: MockRequest):
+        requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
+        requests_mock.get(self.api.TOKEN_ADDRESS, json={"status": "OK", "token": "key"})
+        requests_mock.get("https://0.0.0.0:1337/addKey", json=AUTH_RESPONSE)
+        requests_mock.get("https://0.0.0.0:19999/getSignature", json=SIGNATURE_RESPONSE)
+        requests_mock.get(
+            "https://0.0.0.0:19999/bindPort", json={"status": "error", "message": ""}
+        )
+        self.api.authenticate("testid0", "")
+        with pytest.raises(PyIA.ApiException):
+            self.api.portForward()

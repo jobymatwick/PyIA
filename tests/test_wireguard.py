@@ -21,15 +21,13 @@ from pytest_mock import MockFixture as MockPytest
 from requests_mock.mocker import Mocker as MockRequest
 import subprocess
 
+from PyIA import vpn_data
 from PyIA import wireguard
 
-TEST_CONN_INFO = {
-    "address": "1.2.3.4",
-    "dns": "8.8.8.8",
-    "pubkey": "pubkey",
-    "host": "host0",
-    "endpoint": "9.8.7.6:1337",
-}
+
+TEST_CONN_INFO = vpn_data.Connection(
+    vpn_data.Host("host0", "9.8.7.6"), 1337, "1.2.3.4", "pubkey", ["8.8.8.8"]
+)
 
 TEST_CONFIG = """[Interface]
 Address = 1.2.3.4
@@ -83,7 +81,7 @@ def test_configCreation(mocker: MockPytest):
 def test_connectionOk(requests_mock: MockRequest, mocker: MockPytest):
     requests_mock.get(
         wireguard.IP_CHECK_URL,
-        content=TEST_CONN_INFO["endpoint"].split(":")[0].encode(),
+        content=TEST_CONN_INFO.endpoint.ip.encode("utf-8"),
     )
     mocker.patch("PyIA.wireguard.WIREGUARD_DIR", "")
     wireguard.createConfig(TEST_CONN_INFO, "biglongprivatekey=")
