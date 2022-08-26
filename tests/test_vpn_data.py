@@ -104,24 +104,6 @@ def test_payloadExpired():
     assert not data.payloadValid()
 
 
-def test_payloadBadSig():
-    data = vpn_data.PersistentData(
-        signature="sig",
-        payload=base64.b64encode(
-            json.dumps(
-                {
-                    "signature": "badsig",
-                    "expires_at": (
-                        datetime.datetime.now() + datetime.timedelta(0, 60)
-                    ).isoformat()
-                    + "000Z",
-                }
-            ).encode()
-        ).decode("utf-8"),
-    )
-    assert not data.payloadValid()
-
-
 def test_payloadValid():
     data = vpn_data.PersistentData(
         signature="sig",

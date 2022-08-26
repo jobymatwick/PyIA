@@ -135,7 +135,7 @@ def checkInterface() -> bool:
 
 def connect() -> bool:
     result = subprocess.run(["/usr/bin/wg-quick", "up", "pia"])
-    if result.returncode != 0:
+    if result.returncode != 0 and "already exists" not in result.stderr:
         logger.error("Failed to bring up interface")
         return False
     logger.info("Connection started")

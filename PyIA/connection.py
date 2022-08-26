@@ -44,13 +44,13 @@ def updateConnection(config: dict[str, Any]) -> bool:
                 continue
 
         if not wireguard.checkInterface():
-            if wireguard.connect():
-                connected = wireguard.checkConnection()
+            wireguard.connect()
+        connected = wireguard.checkConnection()
 
         if connected:
             logger.info(f"Successfully connected on attempt {i}")
             api.portForward(config["port_forward_command"])
-            api.data.storeSuccess()
+            api.storeSuccess()
             break
         else:
             wireguard.removeConfig()

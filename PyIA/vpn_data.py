@@ -98,7 +98,7 @@ class PersistentData(yaml.YAMLObject):
             )
         except Exception:
             return False
-        return not_expired and data["signature"] == self.signature
+        return not_expired
 
     def portFromPayload(self) -> int:
         if not self.payloadValid():

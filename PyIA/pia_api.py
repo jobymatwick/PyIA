@@ -201,6 +201,7 @@ class PiaApi:
 
     def storeSuccess(self) -> None:
         self.data.last_success = int(time.time())
+        vpn_data.save(self.data, self.data_file)
 
     def _sslGet(
         self, port: int, path: str, params: dict[str, str]
