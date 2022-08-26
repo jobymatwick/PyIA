@@ -9,3 +9,6 @@ SyslogIdentifier=PyIA
 
 WorkingDirectory=/opt/PyIA
 ExecStart=/opt/PyIA/bin/python3 pyia.py -c config.yml
+
+[Install]
+WantedBy=multi-user.target

@@ -72,9 +72,9 @@ def test_configCreation(mocker: MockPytest):
 
     wireguard.createConfig(TEST_CONN_INFO, "biglongprivatekey=")
 
-    with open("pia.conf", "r") as f:
+    with open(wireguard.WIREGUARD_CONFIG, "r") as f:
         config = f.read()
-    os.remove("pia.conf")
+    os.remove(wireguard.WIREGUARD_CONFIG)
     assert config == TEST_CONFIG
 
 
@@ -87,7 +87,7 @@ def test_connectionOk(requests_mock: MockRequest, mocker: MockPytest):
     wireguard.createConfig(TEST_CONN_INFO, "biglongprivatekey=")
 
     status = wireguard.checkConnection()
-    os.remove("pia.conf")
+    os.remove(wireguard.WIREGUARD_CONFIG)
     assert status == True
 
 
@@ -111,7 +111,7 @@ def test_connectionMismatch(requests_mock: MockRequest, mocker: MockPytest):
     wireguard.createConfig(TEST_CONN_INFO, "biglongprivatekey=")
 
     status = wireguard.checkConnection()
-    os.remove("pia.conf")
+    os.remove(wireguard.WIREGUARD_CONFIG)
     assert status == False
 
 

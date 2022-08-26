@@ -3,8 +3,8 @@ Description=Setup and maintain PIA VPN connection
 
 [Timer]
 Unit=pyia.service
-OnCalendar=*:0/10
-AccuracySec=5m
+OnCalendar=*:0/15
+AccuracySec=2m
 Persistent=true
 
 [Install]

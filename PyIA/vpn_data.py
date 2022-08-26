@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Host(yaml.YAMLObject):
+    """Host object including a hostname and IP.
+    """
     yaml_tag = "!Host"
     yaml_loader = yaml.SafeLoader
 
@@ -42,6 +44,9 @@ class Host(yaml.YAMLObject):
 
 @dataclass
 class Region(yaml.YAMLObject):
+    """Region object including the id, name, lists of server hosts, and if port-
+    forwarding is supported.
+    """
     yaml_tag = "!Region"
     yaml_loader = yaml.SafeLoader
 
@@ -53,6 +58,9 @@ class Region(yaml.YAMLObject):
 
 @dataclass
 class Connection(yaml.YAMLObject):
+    """Connection object including everything needed to create a Wireguard
+    config file.
+    """
     yaml_tag = "!Connection"
     yaml_loader = yaml.SafeLoader
 
@@ -65,6 +73,9 @@ class Connection(yaml.YAMLObject):
 
 @dataclass
 class PersistentData(yaml.YAMLObject):
+    """Data object including everying relating to the VPN connection that must
+    be persisted across runs. Includes helper functions for accessing some data.
+    """
     yaml_tag = "!PersistentData"
     yaml_loader = yaml.SafeLoader
 
@@ -80,14 +91,31 @@ class PersistentData(yaml.YAMLObject):
     last_success: int = 0
 
     def tokenValid(self) -> bool:
+        """Checks if there is a PIA auth token present and if it not expired.
+
+        Returns:
+            bool: True if token is present and valid
+        """
         not_expired = time.time() < self.token_expiry
         return not_expired and self.token
 
     def regionsValid(self) -> bool:
+        """Checks if there is a list of server regions present and if they are
+        not expired.
+
+        Returns:
+            bool: True if regions are present and valid
+        """
         not_expired = time.time() < self.regions_expiry
         return not_expired and self.regions
 
     def payloadValid(self) -> bool:
+        """Checks if there is a port-forwarind payload and signature present, if
+        the payload is in the correct format, and if it is not expired
+
+        Returns:
+            bool: True if the payload and signature are present and valid
+        """
         if not self.payload or not self.signature:
             return False
         try:
@@ -101,12 +129,25 @@ class PersistentData(yaml.YAMLObject):
         return not_expired
 
     def portFromPayload(self) -> int:
+        """Extract the port from the port-forwarding payload, if valid.
+
+        Returns:
+            int: Port from payload (0 if payload is invalid)
+        """
         if not self.payloadValid():
             return 0
         return json.loads(base64.b64decode(self.payload).decode("utf-8"))["port"]
 
 
 def load(data_file: str) -> PersistentData:
+    """Loads a persistent data yaml file.
+
+    Args:
+        data_file (str): Data file to load
+
+    Returns:
+        PersistentData: Loaded data
+    """
     with open(data_file, "r") as f:
         data = yaml.safe_load(f)
         logger.info(f"Loaded VPN data from {data_file}")
@@ -114,6 +155,15 @@ def load(data_file: str) -> PersistentData:
 
 
 def save(data: PersistentData, data_file: str) -> None:
+    """Saves a persistent data yaml file.
+
+    Args:
+        data (PersistentData): Data to save
+        data_file (str): File to save data into (will be overwritten)
+
+    Raises:
+        TypeError: Data is of incorrect type
+    """
     if type(data) != PersistentData:
         raise TypeError("Data to save must be of type PersistentData")
     with open(data_file, "w+") as f:

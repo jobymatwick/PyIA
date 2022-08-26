@@ -82,7 +82,11 @@ def config(args: list) -> dict[str, Any]:
         connected = wireguard.checkConnection() if interface_state else False
         print(f"Wireguard connection is{'' if connected else ' not'} working\n")
         last_success = PiaApi("", "").data.last_success
-        message = f"{((time.time() - last_success) / 60):.1f} minutes ago" if last_success else f"never"
+        message = (
+            f"{((time.time() - last_success) / 60):.1f} minutes ago"
+            if last_success
+            else f"never"
+        )
         print(f"Last successful refresh was {message}")
         sys.exit(0)
 

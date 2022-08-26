@@ -34,6 +34,8 @@ class ApiException(RuntimeError):
 
 
 class PiaApi:
+    """Class to interface with PIA's APIs."""
+
     TOKEN_LIFE_SECONDS = 3600  # 1 hour
     TOKEN_ADDRESS = "https://www.privateinternetaccess.com/gtoken/generateToken"
     REGION_LIFE_SECONDS = 43200  # 12 hours
@@ -42,6 +44,13 @@ class PiaApi:
     PORT_TEMPLATE = "{{PORT}}"
 
     def __init__(self, username: str, password: str, data_file: str = "data.yml"):
+        """Load any data from previous usage if present and store credentials.
+
+        Args:
+            username (str): PIA username
+            password (str): PIA password
+            data_file (str, optional): Persistent data file. Defaults to "data.yml".
+        """
         self.username = username
         self.password = password
         self.data_file = data_file
@@ -85,7 +94,7 @@ class PiaApi:
 
     def regions(self) -> list[vpn_data.Region]:
         """Get a list of PIA server regions. Uses a cached list and refreshes
-        when stale.
+        when stale. Only regions that support Wireguard are included.
 
         Raises:
             ApiException: Failed to get region list from PIA
@@ -141,7 +150,7 @@ class PiaApi:
             ApiException: Authentication failed
 
         Returns:
-            dict[str, str]: Connection info required to configure Wireguard
+            Connection: Connection info required to configure Wireguard
         """
         try:
             region = next(item for item in self.regions() if item.id == region_id)
@@ -169,6 +178,17 @@ class PiaApi:
         return self.data.connection
 
     def portForward(self, command: str = None) -> None:
+        """Establish or refresh port forwarding for the active VPN connection.
+
+        Args:
+            command (str, optional): Command to run when the port is bound or
+                changed. Defaults to None.
+
+        Raises:
+            ApiException: Failed to get a signature and payload
+            ApiException: Signature and payload are invalid
+            ApiException: Failed to bind port
+        """
         new_port = False
         if not self.data.payloadValid():
             resp = self._sslGet(19999, "getSignature", {"token": self.token()}).json()
@@ -200,12 +220,26 @@ class PiaApi:
             logger.info("Port change command ran")
 
     def storeSuccess(self) -> None:
+        """Stores the current time into the persistent data file.
+        """
         self.data.last_success = int(time.time())
         vpn_data.save(self.data, self.data_file)
 
     def _sslGet(
         self, port: int, path: str, params: dict[str, str]
     ) -> requests.Response:
+        """Make an HTTPS GET request to the currently connected server with the
+        SSL certificate from PIA. The certificate will be downloaded if not
+        present.
+
+        Args:
+            port (int): Port of service to send request to
+            path (str): Path to send request to
+            params (dict[str, str]): URL params to include in request
+
+        Returns:
+            requests.Response: Request response
+        """
         if not os.path.exists("ca.rsa.4096.crt"):
             logger.info("Downloading PIA SSL certificate.")
             with open("ca.rsa.4096.crt", "w+") as cert_file:

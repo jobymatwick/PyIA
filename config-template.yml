@@ -4,5 +4,5 @@ username: a1234567
 password: aBcDe12345
 region: vancouver_ca
 port_forward: true
-port_forward_command: echo "Port changed!"
+port_forward_command: echo "Port changed to {{PORT}}!" > port.txt
 log_level: info

@@ -28,6 +28,15 @@ logger = logging.getLogger(__name__)
 
 
 def updateConnection(config: dict[str, Any]) -> bool:
+    """Connection management logic. If no connection is active this will try to
+    establish one, otherwise it will attempt to refresh the connection.
+
+    Args:
+        config (dict[str, Any]): App configuration from config.py
+
+    Returns:
+        bool: True if connection is active
+    """
     connected = False
 
     for i in range(CONNECTION_ATTEMPTS):
@@ -47,12 +56,11 @@ def updateConnection(config: dict[str, Any]) -> bool:
             wireguard.connect()
         connected = wireguard.checkConnection()
 
-        if connected:
-            logger.info(f"Successfully connected on attempt {i}")
+        if not connected:
+            wireguard.removeConfig()
+        else:
+            logger.info(f"Successfully connected on attempt {i + 1}")
             api.portForward(config["port_forward_command"])
             api.storeSuccess()
             break
-        else:
-            wireguard.removeConfig()
-
     return connected

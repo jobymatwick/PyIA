@@ -25,6 +25,7 @@ import logging
 from . import vpn_data
 
 WIREGUARD_DIR = "/etc/wireguard"
+WIREGUARD_CONFIG = "pia.conf"
 NETWORK_IF_DIR = "/sys/class/net/"
 IP_CHECK_URL = "https://api.ipify.org"
 IP_RETRIES = 3
@@ -72,7 +73,7 @@ def createConfig(connection_info: vpn_data.Connection, prikey: str) -> None:
         f"# Hostname = {connection_info.endpoint.hostname}\n"
     )
 
-    with open(os.path.join(WIREGUARD_DIR, "pia.conf"), "w+") as wg_conf:
+    with open(os.path.join(WIREGUARD_DIR, WIREGUARD_CONFIG), "w+") as wg_conf:
         wg_conf.write(config)
 
 
@@ -109,16 +110,17 @@ def checkConfig() -> bool:
     """Check if a Wireguard config exists.
 
     Returns:
-        bool: True if pia.conf is present.
+        bool: True if WIREGUARD_CONFIG is present.
     """
-    present = os.path.exists(os.path.join(WIREGUARD_DIR, "pia.conf"))
+    present = os.path.exists(os.path.join(WIREGUARD_DIR, WIREGUARD_CONFIG))
     logger.debug(f"Wireguard config is{'' if present else ' not'} present.")
     return present
 
 
 def removeConfig() -> None:
+    """Remove the Wiregurd config file from the system, if present."""
     if checkConfig():
-        os.remove(os.path.join(WIREGUARD_DIR, "pia.conf"))
+        os.remove(os.path.join(WIREGUARD_DIR, WIREGUARD_CONFIG))
         logger.debug("Removed wireguard config")
 
 
@@ -134,8 +136,17 @@ def checkInterface() -> bool:
 
 
 def connect() -> bool:
+    """Attempt to bring up configured Wireguard connection.
+
+    Returns:
+        bool: True if successful or caonnection was already up.
+    """
     result = subprocess.run(["/usr/bin/wg-quick", "up", "pia"])
-    if result.returncode != 0 and "already exists" not in result.stderr:
+    if (
+        result.returncode != 0
+        and f"`{WIREGUARD_CONFIG.rsplit('.', 1)[0]}' already exists"
+        not in result.stderr
+    ):
         logger.error("Failed to bring up interface")
         return False
     logger.info("Connection started")
@@ -143,7 +154,12 @@ def connect() -> bool:
 
 
 def _loadConfig() -> vpn_data.Connection:
-    with open(os.path.join(WIREGUARD_DIR, "pia.conf"), "r") as config_file:
+    """Load the Wireguard config file and parse out the connection data.
+
+    Returns:
+        vpn_data.Connection: Connection data from config file
+    """
+    with open(os.path.join(WIREGUARD_DIR, WIREGUARD_CONFIG), "r") as config_file:
         config_str = config_file.read()
         config = configparser.ConfigParser()
         config.read_string(config_str)
