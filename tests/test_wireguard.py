@@ -173,7 +173,7 @@ def test_connectErr(mocker: MockPytest):
 def test_connectionInfo(mocker: MockPytest):
     mocker.patch(
         "PyIA.wireguard.checkInterface",
-        return_value=b"l1\npkey\tpsk\t1.1.1.1:1234\tips\t0\t0\t1025\t25\n",
+        return_value="l1\npkey\tpsk\t1.1.1.1:1234\tips\t0\t0\t1025\t25\n",
     )
     info = wireguard.getConnectionInfo()
     assert info["endpoint"] == "1.1.1.1"

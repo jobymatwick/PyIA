@@ -186,7 +186,7 @@ def getConnectionInfo() -> dict[str, str]:
     info = dict(
         zip(
             INFO_KEYS,
-            checkInterface().splitlines()[1].decode().split("\t"),
+            checkInterface().splitlines()[1].split("\t"),
         )
     )
 
