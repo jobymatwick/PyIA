@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Host(yaml.YAMLObject):
-    """Host object including a hostname and IP.
-    """
+    """Host object including a hostname and IP."""
+
     yaml_tag = "!Host"
     yaml_loader = yaml.SafeLoader
 
@@ -47,6 +47,7 @@ class Region(yaml.YAMLObject):
     """Region object including the id, name, lists of server hosts, and if port-
     forwarding is supported.
     """
+
     yaml_tag = "!Region"
     yaml_loader = yaml.SafeLoader
 
@@ -61,6 +62,7 @@ class Connection(yaml.YAMLObject):
     """Connection object including everything needed to create a Wireguard
     config file.
     """
+
     yaml_tag = "!Connection"
     yaml_loader = yaml.SafeLoader
 
@@ -76,6 +78,7 @@ class PersistentData(yaml.YAMLObject):
     """Data object including everying relating to the VPN connection that must
     be persisted across runs. Includes helper functions for accessing some data.
     """
+
     yaml_tag = "!PersistentData"
     yaml_loader = yaml.SafeLoader
 

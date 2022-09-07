@@ -126,7 +126,7 @@ def checkConnection() -> bool:
             raw = requests.get(IP_CHECK_URL, timeout=3).content.decode("utf8")
             ip = ".".join([str(octa) for octa in [int(i) for i in raw.split(".")]])
         except Exception:
-            logger.warning(f"Failed to get get public IP.")
+            logger.warning(f"Failed to get get public IP on attempt {attempt + 1}")
         if ip:
             break
 
@@ -186,7 +186,7 @@ def getConnectionInfo() -> dict[str, str]:
     info = dict(
         zip(
             INFO_KEYS,
-            checkInterface().splitlines()[1].split("\t"),
+            checkInterface().splitlines()[1].decode().split("\t"),
         )
     )
 
@@ -214,4 +214,4 @@ def _sizeof_fmt(num: float, suffix: str = "B") -> str:
         if abs(num) < 1024.0:
             return f"{num:3.1f} {unit}{suffix}"
         num /= 1024.0
-    return f"{num:.1f}Yi{suffix}"
+    return f"{num:.1f} Yi{suffix}"

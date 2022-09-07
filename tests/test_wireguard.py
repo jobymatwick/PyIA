@@ -39,7 +39,6 @@ PersistentKeepalive = 25
 PublicKey = pubkey
 AllowedIPs = 0.0.0.0/0
 Endpoint = 9.8.7.6:1337
-# Hostname = host0
 """
 
 
@@ -78,16 +77,25 @@ def test_configCreation(mocker: MockPytest):
     assert config == TEST_CONFIG
 
 
+def test_bringDownIfBeforeRmConfig(mocker: MockPytest):
+    mocker.patch("PyIA.wireguard.checkInterface", return_value=True)
+    mocker.patch("PyIA.wireguard.checkConfig", return_value=False)
+    check = mocker.patch("subprocess.run")
+    wireguard.removeConfig()
+    assert check.call_count != 0
+
+
 def test_connectionOk(requests_mock: MockRequest, mocker: MockPytest):
     requests_mock.get(
         wireguard.IP_CHECK_URL,
         content=TEST_CONN_INFO.endpoint.ip.encode("utf-8"),
     )
-    mocker.patch("PyIA.wireguard.WIREGUARD_DIR", "")
-    wireguard.createConfig(TEST_CONN_INFO, "biglongprivatekey=")
+    mocker.patch(
+        "PyIA.wireguard.getConnectionInfo",
+        return_value={"endpoint": TEST_CONN_INFO.endpoint.ip},
+    )
 
     status = wireguard.checkConnection()
-    os.remove(wireguard.WIREGUARD_CONFIG)
     assert status == True
 
 
@@ -107,11 +115,12 @@ def test_connectionMismatch(requests_mock: MockRequest, mocker: MockPytest):
         wireguard.IP_CHECK_URL,
         content=b"9.9.9.9",
     )
-    mocker.patch("PyIA.wireguard.WIREGUARD_DIR", "")
-    wireguard.createConfig(TEST_CONN_INFO, "biglongprivatekey=")
+    mocker.patch(
+        "PyIA.wireguard.getConnectionInfo",
+        return_value={"endpoint": TEST_CONN_INFO.endpoint.ip},
+    )
 
     status = wireguard.checkConnection()
-    os.remove(wireguard.WIREGUARD_CONFIG)
     assert status == False
 
 
@@ -130,17 +139,18 @@ def test_configAbsent():
 
 
 def test_ifPresent(mocker: MockPytest):
-    mocker.patch("PyIA.wireguard.NETWORK_IF_DIR", "./")
-    open("pia", "a").close()
+    mocker.patch(
+        "subprocess.run",
+        return_value=subprocess.CompletedProcess([], 0, stdout=b"text"),
+    )
 
     status = wireguard.checkInterface()
-    os.remove("pia")
-    assert status == True
+    assert status == "text"
 
 
 def test_ifAbsent(mocker: MockPytest):
-    mocker.patch("PyIA.wireguard.NETWORK_IF_DIR", "./")
-    assert wireguard.checkInterface() == False
+    mocker.patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, ""))
+    assert not wireguard.checkInterface()
 
 
 def test_connectOk(mocker: MockPytest):
@@ -149,12 +159,27 @@ def test_connectOk(mocker: MockPytest):
 
     status = wireguard.connect()
     assert status == True
-    assert mock.call_args == mocker.call(["/usr/bin/wg-quick", "up", "pia"])
 
 
 def test_connectErr(mocker: MockPytest):
     mock = mocker.patch("subprocess.run")
     mock.return_value.returncode = 1
+    mock.return_value.stdout = b"msg\n"
 
     status = wireguard.connect()
     assert status == False
+
+
+def test_connectionInfo(mocker: MockPytest):
+    mocker.patch(
+        "PyIA.wireguard.checkInterface",
+        return_value=b"l1\npkey\tpsk\t1.1.1.1:1234\tips\t0\t0\t1025\t25\n",
+    )
+    info = wireguard.getConnectionInfo()
+    assert info["endpoint"] == "1.1.1.1"
+
+
+def test_conversion():
+    assert "1.0 B" == wireguard._sizeof_fmt(1024**0)
+    assert "1.0 KiB" == wireguard._sizeof_fmt(1024**1)
+    assert "1.0 YiB" == wireguard._sizeof_fmt(1024**8)

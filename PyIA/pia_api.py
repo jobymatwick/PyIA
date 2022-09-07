@@ -214,8 +214,7 @@ class PiaApi:
             logger.info("Port change command ran")
 
     def storeSuccess(self) -> None:
-        """Stores the current time into the persistent data file.
-        """
+        """Stores the current time into the persistent data file."""
         self.data.last_success = int(time.time())
         vpn_data.save(self.data, self.data_file)
 

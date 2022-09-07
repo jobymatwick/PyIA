@@ -18,13 +18,11 @@
 
 import os
 import pytest
-from unittest import mock
+from pytest_mock import MockFixture as MockPytest
 import yaml
 
-from PyIA import PiaApi
 from PyIA import config
 from PyIA import vpn_data
-from .test_wireguard import TEST_CONN_INFO
 
 TEST_CONF = {
     "username": "user",
@@ -60,28 +58,28 @@ def test_allArgs():
     assert conf == TEST_CONF
 
 
-def test_listRegions(capfd):
+def test_listRegions(capfd, mocker: MockPytest):
+    mocker.patch("PyIA.PiaApi.regions", mock_regions)
     with pytest.raises(SystemExit) as e:
-        with mock.patch.object(PiaApi, "regions", mock_regions):
-            config(["-l"])
+        config(["-l"])
     out = capfd.readouterr()
     assert e.value.code == 0
     assert "Listing all regions" in out[0]
     assert "* testid" in out[0]
 
 
-def test_showStatus(capfd):
+def test_showStatus(capfd, mocker: MockPytest):
+    mocker.patch("PyIA.wireguard.checkConfig", return_value=True)
+    mocker.patch("PyIA.wireguard.checkInterface", return_value=False)
+
     with pytest.raises(SystemExit) as e:
-        with mock.patch("PyIA.wireguard.WIREGUARD_DIR", ""):
-            with mock.patch("PyIA.wireguard.checkConfig", return_value=True):
-                with mock.patch(
-                    "PyIA.wireguard._loadConfig", return_value=TEST_CONN_INFO
-                ):
-                    config(["-s"])
+        config(["-s"])
     out = capfd.readouterr()
     assert e.value.code == 0
-    assert "Wireguard configuration is present" in out[0]
-    assert "Public IP should be 9.8.7.6" in out[0]
+    assert "config:         present" in out[0]
+    assert "interface:      down" in out[0]
+    assert "last refresh:   never"
+    assert "last handshake: N/A"
 
 
 def test_EnvOverrideConf():
@@ -108,9 +106,8 @@ def test_ArgsOverrideConf():
     assert conf == TEST_CONF
 
 
-def test_missingConfigAlert(capfd):
+def test_missingConfigAlert(mocker: MockPytest):
+    mocker.patch("PyIA.PiaApi.regions", mock_regions)
     with pytest.raises(SystemExit) as e:
-        with mock.patch.object(PiaApi, "regions", mock_regions):
-            config("-c missingconfig.yml".split(" "))
-    out = capfd.readouterr()
+        config("-c missingconfig.yml".split(" "))
     assert e.value.code != 0

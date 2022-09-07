@@ -25,6 +25,6 @@ from PyIA import updateConnection
 
 if __name__ == "__main__":
     conf = config(sys.argv[1:])
-    logging.basicConfig(level=conf['log_level'].upper(), stream=sys.stdout)
+    logging.basicConfig(level=conf["log_level"].upper(), stream=sys.stdout)
     connected = updateConnection(conf)
     sys.exit(0 if connected else 1)
