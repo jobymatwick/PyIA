@@ -19,6 +19,7 @@
 import configparser
 import os
 import subprocess
+import time
 import requests
 import logging
 
@@ -70,40 +71,10 @@ def createConfig(connection_info: vpn_data.Connection, prikey: str) -> None:
         f"PublicKey = {connection_info.server_key}\n"
         f"AllowedIPs = 0.0.0.0/0\n"
         f"Endpoint = {connection_info.endpoint.ip}:{connection_info.port}\n"
-        f"# Hostname = {connection_info.endpoint.hostname}\n"
     )
 
     with open(os.path.join(WIREGUARD_DIR, WIREGUARD_CONFIG), "w+") as wg_conf:
         wg_conf.write(config)
-
-
-def checkConnection() -> bool:
-    """Get the hosts public IP and compare it to the configured connection.
-    Returns true of the IPs match and false if they don't or the public IP
-    cannot be found.
-
-    Returns:
-        bool: True of VPN connection is OK.
-    """
-    retries = IP_RETRIES
-    ip = ""
-
-    while not ip and retries:
-        try:
-            raw = requests.get(IP_CHECK_URL, timeout=3).content.decode("utf8")
-            ip = ".".join([str(octa) for octa in [int(i) for i in raw.split(".")]])
-        except Exception:
-            retries = retries - 1
-            logger.warning(f"Failed to get get public IP.")
-    if not retries:
-        return False
-
-    target_ip = _loadConfig().endpoint.ip
-    if ip == target_ip:
-        logger.info("Connection OK")
-    else:
-        logger.error(f"IP mismatch. Public: { ip }, Expected: { target_ip }")
-    return ip == target_ip
 
 
 def checkConfig() -> bool:
@@ -118,21 +89,49 @@ def checkConfig() -> bool:
 
 
 def removeConfig() -> None:
-    """Remove the Wiregurd config file from the system, if present."""
+    """Remove the Wiregurd config file from the system, if present. Also brings
+    down the interface if it is running"""
+    if checkInterface():
+        subprocess.run(
+            ["/usr/bin/wg-quick", "down", "pia"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     if checkConfig():
         os.remove(os.path.join(WIREGUARD_DIR, WIREGUARD_CONFIG))
         logger.debug("Removed wireguard config")
 
 
-def checkInterface() -> bool:
-    """Check if Wireguard interface is active.
+def checkConnection() -> bool:
+    """Get the hosts public IP and compare it to the configured connection.
+    Returns true of the IPs match and false if they don't or the public IP
+    cannot be found.
 
     Returns:
-        bool: True if interface is active.
+        bool: True of VPN connection is OK.
     """
-    active = "pia" in os.listdir(NETWORK_IF_DIR)
-    logger.debug(f"Wireguard interface is { 'active' if active else 'inactive' }.")
-    return active
+    ip = ""
+    for attempt in range(IP_RETRIES):
+        try:
+            raw = requests.get(IP_CHECK_URL, timeout=3).content.decode("utf8")
+            ip = ".".join([str(octa) for octa in [int(i) for i in raw.split(".")]])
+        except Exception:
+            logger.warning(f"Failed to get get public IP.")
+        if ip:
+            break
+
+    if not ip:
+        logger.error(f"Failed to get public IP {IP_RETRIES} times")
+        return False
+    else:
+        logger.info(f"Current public IP is: {ip}")
+
+    expected_ip = getConnectionInfo()["endpoint"]
+    if ip == expected_ip:
+        logger.info("VPN connection is working")
+    else:
+        logger.error(f"Expected public IP is: {expected_ip}")
+    return ip == expected_ip
 
 
 def connect() -> bool:
@@ -141,39 +140,73 @@ def connect() -> bool:
     Returns:
         bool: True if successful or caonnection was already up.
     """
-    result = subprocess.run(["/usr/bin/wg-quick", "up", "pia"])
+    result = subprocess.run(["/usr/bin/wg-quick", "up", "pia"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if (
         result.returncode != 0
         and f"`{WIREGUARD_CONFIG.rsplit('.', 1)[0]}' already exists"
         not in result.stderr
     ):
         logger.error("Failed to bring up interface")
+        for line in result.stdout.decode().splitlines():
+            logger.debug(f"  wg-quick: {line}")
         return False
     logger.info("Connection started")
     return True
 
 
-def _loadConfig() -> vpn_data.Connection:
-    """Load the Wireguard config file and parse out the connection data.
+def checkInterface() -> str:
+    try:
+        proc = subprocess.run(
+            ["wg", "show", "pia", "dump"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        logger.info("Interface pia is not active")
+        return ""
+    return proc.stdout.decode()
+
+
+def getConnectionInfo() -> dict[str, str]:
+    info = dict(
+        zip(
+            (
+                "pubkey",
+                "presharedkey",
+                "endpoint",
+                "allowedips",
+                "handshake",
+                "rx",
+                "tx",
+                "keepalive",
+            ),
+            checkInterface().splitlines()[1].split("\t"),
+        )
+    )
+
+    info["endpoint"] = info["endpoint"].split(":")[0]
+    info["handshake"] = f"{int(time.time() - int(info['handshake']))}s ago"
+    info["tx"] = _sizeof_fmt(int(info["tx"]))
+    info["rx"] = _sizeof_fmt(int(info["rx"]))
+    info["keepalive"] += "s"
+
+    return info
+
+
+def _sizeof_fmt(num: float, suffix: str = "B") -> str:
+    """Convert size in base units to human readible format,
+    from https://stackoverflow.com/a/1094933.
+
+    Args:
+        num: Number to convert (i.e. in bytes)
+        suffix: Unit to append to end of string (Defaults to "B")
 
     Returns:
-        vpn_data.Connection: Connection data from config file
+        str: Human readable size string
     """
-    with open(os.path.join(WIREGUARD_DIR, WIREGUARD_CONFIG), "r") as config_file:
-        config_str = config_file.read()
-        config = configparser.ConfigParser()
-        config.read_string(config_str)
-
-    connection_info = vpn_data.Connection(
-        vpn_data.Host(
-            next(host for host in config_str.splitlines() if "# Hostname" in host)
-            .split("=")[-1]
-            .strip(),
-            config["Peer"]["Endpoint"].split(":")[0],
-        ),
-        config["Peer"]["Endpoint"].split(":")[-1],
-        config["Interface"]["Address"],
-        config["Peer"]["PublicKey"],
-        [config["Interface"]["DNS"]],
-    )
-    return connection_info
+    for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
+        if abs(num) < 1024.0:
+            return f"{num:3.1f} {unit}{suffix}"
+        num /= 1024.0
+    return f"{num:.1f}Yi{suffix}"

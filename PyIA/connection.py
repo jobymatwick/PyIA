@@ -38,24 +38,22 @@ def updateConnection(config: dict[str, Any]) -> bool:
         bool: True if connection is active
     """
     connected = False
+    api = pia_api.PiaApi(config["username"], config["password"])
 
     for i in range(CONNECTION_ATTEMPTS):
         logger.info(f"Starting connection attempt {i + 1}...")
-        api = pia_api.PiaApi(config["username"], config["password"])
-        if not wireguard.checkConfig():
+        if not wireguard.checkInterface():
             try:
                 logger.info("Generating a new config")
                 keypair = wireguard.createKeypair()
                 conn_info = api.authenticate(config["region"], keypair["pubkey"])
                 wireguard.createConfig(conn_info, keypair["prikey"])
+                wireguard.connect()
             except pia_api.ApiException or ValueError as e:
                 logger.error(f"Auth error: {str(e)}")
                 continue
 
-        if not wireguard.checkInterface():
-            wireguard.connect()
         connected = wireguard.checkConnection()
-
         if not connected:
             wireguard.removeConfig()
         else:
