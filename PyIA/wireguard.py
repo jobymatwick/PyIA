@@ -30,6 +30,16 @@ WIREGUARD_CONFIG = "pia.conf"
 NETWORK_IF_DIR = "/sys/class/net/"
 IP_CHECK_URL = "https://api.ipify.org"
 IP_RETRIES = 3
+INFO_KEYS = (
+    "pubkey",
+    "presharedkey",
+    "endpoint",
+    "allowedips",
+    "handshake",
+    "rx",
+    "tx",
+    "keepalive",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +150,11 @@ def connect() -> bool:
     Returns:
         bool: True if successful or caonnection was already up.
     """
-    result = subprocess.run(["/usr/bin/wg-quick", "up", "pia"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    result = subprocess.run(
+        ["/usr/bin/wg-quick", "up", "pia"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
     if (
         result.returncode != 0
         and f"`{WIREGUARD_CONFIG.rsplit('.', 1)[0]}' already exists"
@@ -171,16 +185,7 @@ def checkInterface() -> str:
 def getConnectionInfo() -> dict[str, str]:
     info = dict(
         zip(
-            (
-                "pubkey",
-                "presharedkey",
-                "endpoint",
-                "allowedips",
-                "handshake",
-                "rx",
-                "tx",
-                "keepalive",
-            ),
+            INFO_KEYS,
             checkInterface().splitlines()[1].split("\t"),
         )
     )

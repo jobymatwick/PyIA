@@ -73,21 +73,21 @@ def config(args: list) -> dict[str, Any]:
         sys.exit(0)
     elif cli_args["status"]:
         config_present = wireguard.checkConfig()
-        print(f"Wireguard configuration is {'pre' if config_present else 'ab'}sent")
-        if config_present:
-            ip = wireguard._loadConfig().endpoint.ip
-            print(f"Public IP should be {ip}")
         interface_state = wireguard.checkInterface()
-        print(f"Wireguard network interface is {'up' if interface_state else 'down'}")
-        connected = wireguard.checkConnection() if interface_state else False
-        print(f"Wireguard connection is{'' if connected else ' not'} working\n")
-        last_success = PiaApi("", "").data.last_success
-        message = (
-            f"{((time.time() - last_success) / 60):.1f} minutes ago"
-            if last_success
-            else f"never"
+        r = PiaApi("", "").data.last_success if interface_state else 0
+        time_since_refresh = f"{((time.time() - r) / 60):.1f}m ago" if r else "never"
+        info = (
+            wireguard.getConnectionInfo()
+            if interface_state
+            else dict.fromkeys(wireguard.INFO_KEYS, "N/A")
         )
-        print(f"Last successful refresh was {message}")
+
+        print(f"config:         {'pre' if config_present else 'ab'}sent")
+        print(f"interface:      {'up' if interface_state else 'down'}")
+        print(f"last refresh:   {time_since_refresh}")
+        print(f"last handshake: {info['handshake']}")
+        print(f"public ip:      {info['endpoint']}")
+        print(f"data transfer:  rx={info['rx']},tx={info['tx']}")
         sys.exit(0)
 
     if cli_args["config"]:
