@@ -93,8 +93,7 @@ class PiaApi:
         return self.data.token
 
     def regions(self) -> list[vpn_data.Region]:
-        """Get a list of PIA server regions. Uses a cached list and refreshes
-        when stale. Only regions that support Wireguard are included.
+        """Get a list of PIA server regions.
 
         Raises:
             ApiException: Failed to get region list from PIA
@@ -102,10 +101,7 @@ class PiaApi:
         Returns:
             list[vpn_data.Region]: List of valid regions
         """
-        if self.data.regionsValid():
-            return self.data.regions
-
-        logger.info("Fetching new region list")
+        logger.info("Fetching server region list")
         resp = requests.get(self.REGION_ADDRESS)
         if resp.status_code != 200:
             raise ApiException(f"Failed to get region file. ({ resp.status_code })")
@@ -113,11 +109,11 @@ class PiaApi:
             raise ApiException(f"Region info file is suspiciously short.")
 
         raw_regions = json.loads(resp.text.splitlines()[0])
-        self.data.regions: list[vpn_data.Region] = []
+        regions: list[vpn_data.Region] = []
         for item in raw_regions["regions"]:
             if "wg" not in item["servers"]:
                 continue
-            self.data.regions.append(
+            regions.append(
                 vpn_data.Region(
                     item["id"],
                     item["name"],
@@ -128,12 +124,10 @@ class PiaApi:
                     ],
                 )
             )
-        self.data.regions_expiry = int(time.time() + self.REGION_LIFE_SECONDS)
-        self.data.regions.sort(key=lambda x: x.id)
+        regions.sort(key=lambda x: x.id)
 
-        logger.info("Successfully got updated region list")
-        vpn_data.save(self.data, self.data_file)
-        return self.data.regions
+        logger.info(f"Successfully got region list containing {len(regions)} regions")
+        return regions
 
     def authenticate(
         self, region_id: str, pubkey: str, server_id: int = 0

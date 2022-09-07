@@ -67,21 +67,6 @@ def test_tokenValid():
     assert data.tokenValid()
 
 
-def test_regionsExpired():
-    data = vpn_data.PersistentData(regions_expiry=time.time() - 1, regions=["regions"])
-    assert not data.regionsValid()
-
-
-def test_regionsMissing():
-    data = vpn_data.PersistentData(regions_expiry=time.time() + 1)
-    assert not data.regionsValid()
-
-
-def test_regionsValid():
-    data = vpn_data.PersistentData(regions_expiry=time.time() + 1, regions=["regions"])
-    assert data.regionsValid()
-
-
 def test_payloadMissing():
     data = vpn_data.PersistentData(signature="sig")
     assert not data.payloadValid()

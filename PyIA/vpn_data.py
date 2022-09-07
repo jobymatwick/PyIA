@@ -82,8 +82,6 @@ class PersistentData(yaml.YAMLObject):
     username: str = None
     token: str = None
     token_expiry: int = 0
-    regions: list[Region] = None
-    regions_expiry: int = 0
     connection: Connection = None
     port: int = None
     signature: str = None
@@ -98,16 +96,6 @@ class PersistentData(yaml.YAMLObject):
         """
         not_expired = time.time() < self.token_expiry
         return not_expired and self.token
-
-    def regionsValid(self) -> bool:
-        """Checks if there is a list of server regions present and if they are
-        not expired.
-
-        Returns:
-            bool: True if regions are present and valid
-        """
-        not_expired = time.time() < self.regions_expiry
-        return not_expired and self.regions
 
     def payloadValid(self) -> bool:
         """Checks if there is a port-forwarind payload and signature present, if

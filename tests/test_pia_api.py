@@ -147,21 +147,6 @@ class TestPiaApi:
         regions = self.api.regions()
         assert len(regions) == len(SAMPLE_REGIONS["regions"]) - 1
 
-    def test_savesRegions(self, requests_mock: MockRequest):
-        requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
-        request_time = int(time.time())
-        regions = self.api.regions()
-        loaded = vpn_data.load(TEST_FILE)
-        for i, region in enumerate(regions):
-            assert region == loaded.regions[i]
-        assert loaded.regions_expiry == request_time + self.api.REGION_LIFE_SECONDS
-
-    def test_storedRegionsOk(self, requests_mock: MockRequest):
-        mock = requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
-        self.api.regions()
-        self.api.regions()
-        assert mock.call_count == 1
-
     def test_downloadsCert(self, requests_mock: MockRequest):
         with open("tests/test_cert.crt", "r") as test_cert:
             cert_text = test_cert.read()
