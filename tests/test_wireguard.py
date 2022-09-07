@@ -124,12 +124,24 @@ def test_connectionMismatch(requests_mock: MockRequest, mocker: MockPytest):
     assert status == False
 
 
-def test_configPresent(mocker: MockPytest):
+def test_configPresentIfAbsent(mocker: MockPytest):
     mocker.patch("PyIA.wireguard.WIREGUARD_DIR", "")
+    mocker.patch("PyIA.wireguard.checkInterface", return_value=False)
     wireguard.createConfig(TEST_CONN_INFO, "biglongprivatekey=")
 
     status = wireguard.checkConfig()
     wireguard.removeConfig()
+    assert status == True
+
+def test_configPresentIfPresent(mocker: MockPytest):
+    mocker.patch("PyIA.wireguard.WIREGUARD_DIR", "")
+    mocker.patch("PyIA.wireguard.checkInterface", return_value=True)
+    down = mocker.patch("subprocess.run")
+    wireguard.createConfig(TEST_CONN_INFO, "biglongprivatekey=")
+
+    status = wireguard.checkConfig()
+    wireguard.removeConfig()
+    assert down.call_count
     assert status == True
 
 
