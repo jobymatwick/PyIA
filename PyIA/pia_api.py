@@ -36,9 +36,9 @@ class ApiException(RuntimeError):
 class PiaApi:
     """Class to interface with PIA's APIs."""
 
-    TOKEN_LIFE_SECONDS = 3600  # 1 hour
+    TOKEN_LIFE_SECONDS = 1 * 60 * 60  # 1 hour
     TOKEN_ADDRESS = "https://www.privateinternetaccess.com/gtoken/generateToken"
-    REGION_LIFE_SECONDS = 43200  # 12 hours
+    REGION_LIFE_SECONDS = 12 * 60 * 60  # 12 hours
     REGION_ADDRESS = "https://serverlist.piaservers.net/vpninfo/servers/v6"
     SSL_CERT_ADDRESS = "https://raw.githubusercontent.com/pia-foss/manual-connections/master/ca.rsa.4096.crt"
     PORT_TEMPLATE = "{{PORT}}"
@@ -185,6 +185,7 @@ class PiaApi:
         """
         new_port = False
         if not self.data.payloadValid():
+            logger.info("Getting new port forwarding signature...")
             resp = self._sslGet(19999, "getSignature", {"token": self.token()}).json()
             if resp["status"] != "OK":
                 raise ApiException(f"Failed to get signature ({resp['message']})")
@@ -203,7 +204,12 @@ class PiaApi:
         ).json()
 
         if resp["status"] != "OK":
-            raise ApiException(f"Failed to bind port ({resp['message']})")
+            if resp["message"] == "port expired":
+                logger.error("Failed to bind port because it's expired. Retrying...")
+                self.data.payload = None  # Make the payload invalid before retrying
+                self.portForward(command)
+            else:
+                raise ApiException(f"Failed to bind port ({resp['message']})")
         logger.info("Port bound successfully")
         vpn_data.save(self.data, self.data_file)
 
