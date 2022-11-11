@@ -61,7 +61,7 @@ SIGNATURE_RESPONSE = {
             {
                 "signature": "sig",
                 "expires_at": (
-                    datetime.datetime.now() + datetime.timedelta(0, 600)
+                    datetime.datetime.utcnow() + datetime.timedelta(0, 600)
                 ).isoformat()
                 + "000Z",
                 "port": 12345,

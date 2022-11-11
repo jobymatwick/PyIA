@@ -97,7 +97,7 @@ def test_payloadValid():
                 {
                     "signature": "sig",
                     "expires_at": (
-                        datetime.datetime.now() + datetime.timedelta(0, 60)
+                        datetime.datetime.utcnow() + datetime.timedelta(0, 60)
                     ).isoformat()
                     + "000Z",
                 }
@@ -120,7 +120,7 @@ def test_portValid():
                 {
                     "signature": "sig",
                     "expires_at": (
-                        datetime.datetime.now() + datetime.timedelta(0, 60)
+                        datetime.datetime.utcnow() + datetime.timedelta(0, 60)
                     ).isoformat()
                     + "000Z",
                     "port": 12345,

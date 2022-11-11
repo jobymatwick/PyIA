@@ -36,9 +36,9 @@ class ApiException(RuntimeError):
 class PiaApi:
     """Class to interface with PIA's APIs."""
 
-    TOKEN_LIFE_SECONDS = 3600  # 1 hour
+    TOKEN_LIFE_SECONDS = 1 * 60 * 60  # 1 hour
     TOKEN_ADDRESS = "https://www.privateinternetaccess.com/gtoken/generateToken"
-    REGION_LIFE_SECONDS = 43200  # 12 hours
+    REGION_LIFE_SECONDS = 12 * 60 * 60  # 12 hours
     REGION_ADDRESS = "https://serverlist.piaservers.net/vpninfo/servers/v6"
     SSL_CERT_ADDRESS = "https://raw.githubusercontent.com/pia-foss/manual-connections/master/ca.rsa.4096.crt"
     PORT_TEMPLATE = "{{PORT}}"

@@ -101,8 +101,8 @@ class PersistentData(yaml.YAMLObject):
         return not_expired and self.token
 
     def payloadValid(self) -> bool:
-        """Checks if there is a port-forwarind payload and signature present, if
-        the payload is in the correct format, and if it is not expired
+        """Checks if there is a port-forwarding payload and signature present,
+        if the payload is in the correct format, and if it is not expired
 
         Returns:
             bool: True if the payload and signature are present and valid
@@ -113,7 +113,9 @@ class PersistentData(yaml.YAMLObject):
             data = json.loads(base64.b64decode(self.payload).decode("utf-8"))
             not_expired = (
                 time.time()
-                < datetime.datetime.fromisoformat(data["expires_at"][:-4]).timestamp()
+                < datetime.datetime.strptime(
+                    data["expires_at"][:-4] + "+0000", "%Y-%m-%dT%H:%M:%S.%f%z"
+                ).timestamp()
             )
         except Exception:
             return False
