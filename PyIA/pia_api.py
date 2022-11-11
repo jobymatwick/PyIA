@@ -185,6 +185,7 @@ class PiaApi:
         """
         new_port = False
         if not self.data.payloadValid():
+            logger.info("Getting new port forwarding signature...")
             resp = self._sslGet(19999, "getSignature", {"token": self.token()}).json()
             if resp["status"] != "OK":
                 raise ApiException(f"Failed to get signature ({resp['message']})")
@@ -203,7 +204,12 @@ class PiaApi:
         ).json()
 
         if resp["status"] != "OK":
-            raise ApiException(f"Failed to bind port ({resp['message']})")
+            if resp["message"] == "port expired":
+                logger.error("Failed to bind port because it's expired. Retrying...")
+                self.data.payload = None  # Make the payload invalid before retrying
+                self.portForward(command)
+            else:
+                raise ApiException(f"Failed to bind port ({resp['message']})")
         logger.info("Port bound successfully")
         vpn_data.save(self.data, self.data_file)
 

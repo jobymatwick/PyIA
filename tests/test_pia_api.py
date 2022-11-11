@@ -247,6 +247,28 @@ class TestPiaApi:
         with pytest.raises(PyIA.ApiException):
             self.api.portForward()
 
+    def test_pfBindExpiredRetry(self, requests_mock: MockRequest):
+        requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
+        requests_mock.get(self.api.TOKEN_ADDRESS, json={"status": "OK", "token": "key"})
+        requests_mock.get("https://0.0.0.0:1337/addKey", json=AUTH_RESPONSE)
+        mock = requests_mock.get("https://0.0.0.0:19999/getSignature", json=SIGNATURE_RESPONSE)
+        requests_mock.get(
+            "https://0.0.0.0:19999/bindPort",
+            [
+                {
+                    "json": {"status": "error", "message": "port expired"},
+                    "status_code": 400,
+                },
+                {
+                    "json": {"status": "OK", "message": "bind success"},
+                    "status_code": 200,
+                },
+            ],
+        )
+        self.api.authenticate("testid0", "")
+        self.api.portForward()
+        assert mock.call_count == 2
+
     def test_pfBindFail(self, requests_mock: MockRequest):
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
         requests_mock.get(self.api.TOKEN_ADDRESS, json={"status": "OK", "token": "key"})
