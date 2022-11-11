@@ -1,5 +1,5 @@
 # PyIA (Pyvate Internet Access)
-[![Test Status](https://github.com/jobymatwick/PyIA/actions/workflows/pytest.yaml/badge.svg?branch=main)](https://github.com/jobymatwick/PyIA/actions/workflows/pytest.yaml?branch=main)
+[![Test Status](https://github.com/jobymatwick/PyIA/actions/workflows/pytest.yaml/badge.svg?branch=main)](https://github.com/jobymatwick/PyIA/actions/workflows/pytest.yml?branch=main)
 [![Coverage Status](https://coveralls.io/repos/github/jobymatwick/PyIA/badge.svg?branch=main)](https://coveralls.io/github/jobymatwick/PyIA?branch=main)
 
 
@@ -17,8 +17,6 @@ Features include:
 * Ability to run custom command when forwarded port changes
 * Fully [idempotent](https://en.wikipedia.org/wiki/Idempotence)
 * Lightweight (Nothing running between connection refreshes)
-
-**NOTE:** This project is under active development - Expect major changes.
 
 ## Setup and Usage
 Installation instructions are included in the wiki
