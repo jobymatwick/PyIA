@@ -1,7 +1,7 @@
 # PyIA (Pyvate Internet Access)
-[![Test Status](https://github.com/jobymatwick/PyIA/actions/workflows/pytest.yaml/badge.svg?branch=main)](https://github.com/jobymatwick/PyIA/actions/workflows/pytest.yml?branch=main)
-[![Coverage Status](https://coveralls.io/repos/github/jobymatwick/PyIA/badge.svg?branch=main)](https://coveralls.io/github/jobymatwick/PyIA?branch=main)
 
+[![Test Status](https://github.com/jobymatwick/PyIA/actions/workflows/pytest.yml/badge.svg?branch=main)](https://github.com/jobymatwick/PyIA/actions/workflows/pytest.yml?branch=main)
+[![Coverage Status](https://coveralls.io/repos/github/jobymatwick/PyIA/badge.svg?branch=main)](https://coveralls.io/github/jobymatwick/PyIA?branch=main)
 
 Python application for establishing and maintaining Private Internet Access
 Wireguard VPN connections. Fully idempotent so that it can be run by a timer or
@@ -10,7 +10,8 @@ the steps outlined in the official
 [manual-connections](https://github.com/pia-foss/manual-connections) shell
 scripts.
 
-Features include:
+**Features include:**
+
 * Automatic authentication with PIA servers
 * Retries if connection fails
 * Port-forwarding support
@@ -19,6 +20,7 @@ Features include:
 * Lightweight (Nothing running between connection refreshes)
 
 ## Setup and Usage
+
 Installation instructions are included in the wiki
 [here](https://github.com/jobymatwick/PyIA/wiki/Setup). Configuration
 and usage instructions can be found
