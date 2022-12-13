@@ -133,6 +133,7 @@ def test_configPresentIfAbsent(mocker: MockPytest):
     wireguard.removeConfig()
     assert status == True
 
+
 def test_configPresentIfPresent(mocker: MockPytest):
     mocker.patch("PyIA.wireguard.WIREGUARD_DIR", "")
     mocker.patch("PyIA.wireguard.checkInterface", return_value=True)

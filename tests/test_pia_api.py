@@ -26,8 +26,7 @@ from pytest_mock import MockFixture as MockPytest
 from requests_mock.mocker import Mocker as MockRequest
 import time
 
-from PyIA import PiaApi, ApiException, vpn_data
-import PyIA
+from PyIA import pia_api, vpn_data
 
 TEST_FILE = "test_api.yml"
 SAMPLE_REGIONS = {
@@ -73,7 +72,7 @@ SIGNATURE_RESPONSE = {
 
 class TestPiaApi:
     def setup_method(self):
-        self.api = PiaApi("username", "password", TEST_FILE)
+        self.api = pia_api.PiaApi("username", "password", TEST_FILE)
 
     def teardown_method(self):
         if os.path.exists(TEST_FILE):
@@ -84,7 +83,7 @@ class TestPiaApi:
             self.api.TOKEN_ADDRESS,
             json={"status": "ERROR", "message": "error message"},
         )
-        with pytest.raises(ApiException):
+        with pytest.raises(pia_api.ApiException):
             self.api.token()
 
     def test_returnsNewToken(self, requests_mock: MockRequest):
@@ -117,22 +116,22 @@ class TestPiaApi:
 
     def test_fileIfUsernameMatch(self, requests_mock: MockRequest):
         self.test_returnsNewToken(requests_mock)
-        api = PiaApi("username", "password", TEST_FILE)
+        api = pia_api.PiaApi("username", "password", TEST_FILE)
         assert api.data.token == "testtoken"
 
     def test_fileIfUsernameMismatch(self, requests_mock: MockRequest):
         self.test_returnsNewToken(requests_mock)
-        api = PiaApi("othername", "password", TEST_FILE)
+        api = pia_api.PiaApi("othername", "password", TEST_FILE)
         assert api.data.token == None
 
     def test_checksRegionResp(self, requests_mock: MockRequest):
         requests_mock.get(self.api.REGION_ADDRESS, status_code=403)
-        with pytest.raises(ApiException):
+        with pytest.raises(pia_api.ApiException):
             self.api.regions()
 
     def test_checksRegionRespLen(self, requests_mock: MockRequest):
         requests_mock.get(self.api.REGION_ADDRESS, text="abc123")
-        with pytest.raises(ApiException):
+        with pytest.raises(pia_api.ApiException):
             self.api.regions()
 
     def test_returnsNewRegions(self, requests_mock: MockRequest):
@@ -175,7 +174,7 @@ class TestPiaApi:
             "https://0.0.0.0:1337/addKey",
             json={"status": "ERROR", "message": "error message"},
         )
-        with pytest.raises(ApiException):
+        with pytest.raises(pia_api.ApiException):
             self.api.authenticate("testid0", "")
 
     def test_authReturnsConnInfo(self, requests_mock: MockRequest):
@@ -232,7 +231,7 @@ class TestPiaApi:
             "https://0.0.0.0:19999/getSignature", json={"status": "err", "message": ""}
         )
         self.api.authenticate("testid0", "")
-        with pytest.raises(PyIA.ApiException):
+        with pytest.raises(pia_api.ApiException):
             self.api.portForward()
 
     def test_pfNoSavedSigInvalid(self, requests_mock: MockRequest):
@@ -244,14 +243,16 @@ class TestPiaApi:
             json={"status": "OK", "signature": "sig", "payload": "no"},
         )
         self.api.authenticate("testid0", "")
-        with pytest.raises(PyIA.ApiException):
+        with pytest.raises(pia_api.ApiException):
             self.api.portForward()
 
     def test_pfBindExpiredRetry(self, requests_mock: MockRequest):
         requests_mock.get(self.api.REGION_ADDRESS, json=SAMPLE_REGIONS)
         requests_mock.get(self.api.TOKEN_ADDRESS, json={"status": "OK", "token": "key"})
         requests_mock.get("https://0.0.0.0:1337/addKey", json=AUTH_RESPONSE)
-        mock = requests_mock.get("https://0.0.0.0:19999/getSignature", json=SIGNATURE_RESPONSE)
+        mock = requests_mock.get(
+            "https://0.0.0.0:19999/getSignature", json=SIGNATURE_RESPONSE
+        )
         requests_mock.get(
             "https://0.0.0.0:19999/bindPort",
             [
@@ -278,7 +279,7 @@ class TestPiaApi:
             "https://0.0.0.0:19999/bindPort", json={"status": "error", "message": ""}
         )
         self.api.authenticate("testid0", "")
-        with pytest.raises(PyIA.ApiException):
+        with pytest.raises(pia_api.ApiException):
             self.api.portForward()
 
     def test_storeSuccess(self):

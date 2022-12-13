@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Combines config options from the CLI, environment vars, and config file"""
 
 # PyIA
@@ -16,106 +14,75 @@
 # You should have received a copy of the GNU General Public License along with
 # this program. If not, see <http://www.gnu.org/licenses/>.
 
-import argparse
-import logging
 import os
-import sys
-import time
 from typing import Any
 import yaml
-
-from .pia_api import PiaApi
-from . import wireguard
+from dataclasses import dataclass, fields
 
 FALSY_STRINGS = ["false", "f", "no", "0"]
-CONFIG_DICT = {
-    "region": None,
-    "username": None,
-    "password": None,
-    "port_forward": False,
-    "port_forward_command": "",
-    "log_level": "info",
-}
-
-logger = logging.getLogger(__name__)
-parser = argparse.ArgumentParser(
-    description="Python application for establishing and maintaining Private "
-    "Internet Access Wireguard VPN connections."
-)
-
-parser.add_argument("-c", "--config", help="Config file to load")
-parser.add_argument("-u", "--username", help="PIA account username")
-parser.add_argument("-p", "--password", help="PIA account password")
-parser.add_argument("-r", "--region", help="ID of server region to connect to")
-parser.add_argument("-P", "--port-forward", action="store_true", help="Forward port")
-parser.add_argument("-q", "--port-forward-command", help="Run when port changes")
-parser.add_argument("-L", "--log-level", help="Application output logging level")
-parser.add_argument("-s", "--status", action="store_true", help="Get connection status")
-parser.add_argument("-l", "--list-regions", action="store_true", help="List regions")
 
 
-def config(args: list) -> dict[str, Any]:
-    """Combine configuration options from CLI flags, environment variables, and
-    a config file.
+@dataclass
+class Config:
+    """Application config dataclass
 
-    Returns:
-        dict: Populated copy of CONFIG_DICT
+    Raises:
+        ValueError: required config parameter was not provided
     """
-    config = CONFIG_DICT
-    cli_args = vars(parser.parse_args(args))
-    if cli_args["list_regions"]:
-        regions = PiaApi("", "").regions()
-        print("Listing all regions. (*) means regions supports port forwarding.\n")
-        print("  Region ID             Region Name")
-        print("---------------------------------------------")
-        for region in regions:
-            print(f'{"*" if region.port_forward else " "} {region.id:22}{region.name}')
-        sys.exit(0)
-    elif cli_args["status"]:
-        config_present = wireguard.checkConfig()
-        interface_state = wireguard.checkInterface()
-        port = PiaApi("", "").data.portFromPayload() if interface_state else 0
-        r = PiaApi("", "").data.last_success if interface_state else 0
-        time_since_refresh = f"{((time.time() - r) / 60):.1f}m ago" if r else "never"
-        info = (
-            wireguard.getConnectionInfo()
-            if interface_state
-            else dict.fromkeys(wireguard.INFO_KEYS, "N/A")
-        )
 
-        print("PyIA Info:")
-        print(f"  config:         {'pre' if config_present else 'ab'}sent")
-        print(f"  interface:      {'up' if interface_state else 'down'}")
-        print(f"  last refresh:   {time_since_refresh}\n")
-        print("Wireguard Connection Info:")
-        print(f"  last handshake: {info['handshake']}")
-        print(f"  public ip:      {info['endpoint']}")
-        print(f"  forwarded port: {port if port else 'N/A'}")
-        print(f"  data transfer:  rx={info['rx']},tx={info['tx']}")
-        sys.exit(0)
+    username: str = None
+    password: str = None
+    region: str = None
+    port_forward: bool = False
+    port_forward_command: str = ""
 
-    if cli_args["config"]:
-        try:
-            with open(cli_args["config"], "r") as config_file:
-                conf_args = yaml.safe_load(config_file)
-        except FileNotFoundError:
-            logger.error(f"Failed to open config file { cli_args['config'] }")
-            sys.exit(1)
+    def __init__(self, arguments: dict[str, Any]):
+        """Generate a config object from parsed CLI arguments
 
-    # Config option precedence (1 overrides 2, etc):
-    #  1. CLI flags
-    #  2. Environment variables
-    #  3. Config file
-    for key in config.keys():
-        if key in cli_args and cli_args[key]:
-            config[key] = cli_args[key]
-        elif ("PYIA_" + key.upper()) in os.environ:
-            env = os.environ["PYIA_" + key.upper()]
-            if key == "port_forward":
-                config[key] = False if env.lower() in FALSY_STRINGS else True
-            else:
-                config[key] = env
-        elif cli_args["config"] and key in conf_args:
-            config[key] = conf_args[key]
+        Args:
+            arguments (dict[str, Any]): Parsed CLI arguments
+        """
+        if "config" in arguments:
+            self.load_file(arguments["config"])
+        self.load_env()
+        self.load_flags(arguments)
 
-    return config
+        for parameter in fields(Config):
+            if getattr(self, parameter.name) == None:
+                raise ValueError(
+                    f"Required config parameter {parameter.name} was never specified"
+                )
+
+    def load_file(self, config_filename: str) -> None:
+        """Update config parameters with valuus from config yaml file
+
+        Args:
+            config_filename (str): Path of config file to load
+        """
+        with open(config_filename, "r") as config_file:
+            config = yaml.safe_load(config_file)
+
+        for parameter in fields(Config):
+            if parameter.name in config:
+                setattr(self, parameter.name, config[parameter.name])
+
+    def load_env(self) -> None:
+        """Update config parameters with valuus from environment variables"""
+        for parameter in fields(Config):
+            if f"PYIA_{parameter.name.upper()}" in os.environ:
+                value = os.environ[f"PYIA_{parameter.name.upper()}"]
+                if parameter.type == bool:
+                    value = not (value in FALSY_STRINGS)
+                setattr(self, parameter.name, value)
+
+    def load_flags(self, arguments: dict[str, Any]) -> None:
+        """Update config parameters with values from CLI arguments
+
+        Args:
+            arguments (dict[str, any]): Parsed CLI arguments
+        """
+        for parameter in fields(Config):
+            if parameter.name.replace("_", "-") in arguments:
+                setattr(
+                    self, parameter.name, arguments[parameter.name.replace("_", "-")]
+                )

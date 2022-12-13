@@ -18,7 +18,7 @@
 
 from pytest_mock import MockFixture as MockPytest
 
-import PyIA
+from PyIA import connection, pia_api
 from .test_config import TEST_CONF
 from .test_wireguard import TEST_CONN_INFO
 
@@ -32,11 +32,11 @@ class MockPiaApi:
     def authenticate(self, *args):
         if self.fails:
             self.fails = self.fails - 1
-            raise PyIA.ApiException("Failed for test")
+            raise pia_api.ApiException("Failed for test")
         return TEST_CONN_INFO
 
     def portForward(self, command: str):
-        assert command == TEST_CONF["port_forward_command"]
+        assert command == TEST_CONF.port_forward_command
 
     def storeSuccess(self):
         pass
@@ -51,7 +51,7 @@ def test_newConnectionOk(mocker: MockPytest):
     mocks.append(mocker.patch("PyIA.wireguard.connect"))
     mocks.append(mocker.patch("PyIA.wireguard.checkConnection", return_value=True))
 
-    status = PyIA.updateConnection(TEST_CONF)
+    status = connection.update(TEST_CONF)
     assert status == True
     for mock in mocks:
         assert mock.call_count == 1
@@ -63,7 +63,7 @@ def test_existingConnectionOk(mocker: MockPytest):
     mocks.append(mocker.patch("PyIA.wireguard.checkInterface", return_value=True))
     mocks.append(mocker.patch("PyIA.wireguard.checkConnection", return_value=True))
 
-    status = PyIA.updateConnection(TEST_CONF)
+    status = connection.update(TEST_CONF)
     assert status == True
     for mock in mocks:
         assert mock.call_count == 1
@@ -75,7 +75,7 @@ def test_retriesAuthFails(mocker: MockPytest):
     mocks.append(mocker.patch("PyIA.wireguard.checkInterface", return_value=False))
     mocks.append(mocker.patch("PyIA.wireguard.createKeypair", return_value=TEST_PAIR))
 
-    status = PyIA.updateConnection(TEST_CONF)
+    status = connection.update(TEST_CONF)
     assert status == False
     for mock in mocks:
         assert mock.call_count == 3
@@ -91,7 +91,7 @@ def test_retriesConnectionFails(mocker: MockPytest):
     mocks.append(mocker.patch("PyIA.wireguard.checkConnection", return_value=False))
     mocks.append(mocker.patch("PyIA.wireguard.removeConfig", return_value=None))
 
-    status = PyIA.updateConnection(TEST_CONF)
+    status = connection.update(TEST_CONF)
     assert status == False
     for mock in mocks:
         assert mock.call_count == 3
