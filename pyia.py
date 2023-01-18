@@ -17,14 +17,57 @@ Wireguard VPN connections."""
 # You should have received a copy of the GNU General Public License along with
 # this program. If not, see <http://www.gnu.org/licenses/>.
 
+import argparse
 import logging
 import sys
 
-from PyIA import config
-from PyIA import updateConnection
+from PyIA import requirements
+
+
+def main(arguments: list[str]) -> int:
+    """Main application entry point
+
+    Args:
+        arguments (list[str]): Raw CLI arguments
+
+    Returns:
+        int: 0 on success, error code otherwise
+    """
+    setup_logging(arguments)
+
+    # Check for requirements before importing modules that need them
+    requirements.check_all()
+    from PyIA import cli, connection
+
+    interface = cli.CLI(arguments)
+    connected = connection.update(interface.config)
+
+
+def setup_logging(arguments: list[str]):
+    """Set the log level depending on arguments, env vars, and the config file
+
+    Args:
+        arguments (list[str]): Raw CLI arguments
+    """
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("-c", "--config")
+    parser.add_argument("-L", "--log-level")
+
+    parsed = vars(parser.parse_known_args(arguments)[0])
+
+    if parsed["log_level"]:
+        level = parsed["log_level"]
+    else:
+        try:
+            import yaml
+
+            with open(parsed["config"]) as config_file:
+                level = yaml.safe_load(config_file)["log_level"]
+        except (ImportError, FileNotFoundError, TypeError, KeyError):
+            level = "info"
+
+    logging.basicConfig(level=level.upper(), stream=sys.stdout)
+
 
 if __name__ == "__main__":
-    conf = config(sys.argv[1:])
-    logging.basicConfig(level=conf["log_level"].upper(), stream=sys.stdout)
-    connected = updateConnection(conf)
-    sys.exit(0 if connected else 1)
+    sys.exit(main(sys.argv))

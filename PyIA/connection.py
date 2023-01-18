@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Checks for an active connection and starts one if needed"""
 
 # PyIA
@@ -19,15 +17,14 @@
 import logging
 from typing import Any
 
-from . import wireguard
-from . import pia_api
+from . import wireguard, pia_api
 
 CONNECTION_ATTEMPTS = 3
 
 logger = logging.getLogger(__name__)
 
 
-def updateConnection(config: dict[str, Any]) -> bool:
+def update(config: dict[str, Any]) -> bool:
     """Connection management logic. If no connection is active this will try to
     establish one, otherwise it will attempt to refresh the connection.
 
@@ -38,7 +35,7 @@ def updateConnection(config: dict[str, Any]) -> bool:
         bool: True if connection is active
     """
     connected = False
-    api = pia_api.PiaApi(config["username"], config["password"])
+    api = pia_api.PiaApi(config.username, config.password)
 
     for i in range(CONNECTION_ATTEMPTS):
         logger.info(f"Starting connection attempt {i + 1}...")
@@ -46,7 +43,7 @@ def updateConnection(config: dict[str, Any]) -> bool:
             try:
                 logger.info("Generating a new config")
                 keypair = wireguard.createKeypair()
-                conn_info = api.authenticate(config["region"], keypair["pubkey"])
+                conn_info = api.authenticate(config.region, keypair["pubkey"])
                 wireguard.createConfig(conn_info, keypair["prikey"])
                 wireguard.connect()
             except pia_api.ApiException or ValueError as e:
@@ -58,7 +55,7 @@ def updateConnection(config: dict[str, Any]) -> bool:
             wireguard.removeConfig()
         else:
             logger.info(f"Successfully connected on attempt {i + 1}")
-            api.portForward(config["port_forward_command"])
+            api.portForward(config.port_forward_command)
             api.storeSuccess()
             break
     return connected
