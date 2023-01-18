@@ -17,21 +17,19 @@
 import logging
 import os
 import pathlib
+import pkg_resources
 import subprocess
 import sys
-import pkg_resources
 
 logger = logging.getLogger(__name__)
 
 
 def check_all() -> None:
     """Check for all the requirements and exit if they are not met"""
-    if not _check_python_requirements():
-        sys.exit(1)
-    if not _check_root():
-        sys.exit(2)
-    if not _check_wireguard():
-        sys.exit(3)
+    check_fns = [_check_python_requirements, _check_root, _check_wireguard]
+    for check_idx, check_fn in enumerate(check_fns):
+        if not check_fn():
+            sys.exit(check_idx + 1)
     logger.debug("all requirements met")
     return
 
