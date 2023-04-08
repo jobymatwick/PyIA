@@ -41,7 +41,7 @@ def main(arguments: list[str]) -> int:
 
     interface = cli.CLI(arguments)
     connected = connection.update(interface.config)
-
+    return not connected
 
 def setup_logging(arguments: list[str]):
     """Set the log level depending on arguments, env vars, and the config file

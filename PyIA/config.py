@@ -42,7 +42,7 @@ class Config:
         Args:
             arguments (dict[str, Any]): Parsed CLI arguments
         """
-        if "config" in arguments:
+        if "config" in arguments and arguments["config"]:
             self.load_file(arguments["config"])
         self.load_env()
         self.load_flags(arguments)
@@ -82,7 +82,8 @@ class Config:
             arguments (dict[str, any]): Parsed CLI arguments
         """
         for parameter in fields(Config):
-            if parameter.name.replace("_", "-") in arguments:
+            name = parameter.name.replace("_", "-")
+            if name in arguments and arguments[name] != None:
                 setattr(
-                    self, parameter.name, arguments[parameter.name.replace("_", "-")]
+                    self, parameter.name, arguments[name]
                 )
