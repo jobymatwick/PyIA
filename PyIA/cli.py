@@ -56,13 +56,12 @@ class CLI:
             "-l", "--list-regions", action="store_true", help="List regions"
         )
 
-        parsed = parser.parse_args(args)
+        parsed = parser.parse_args(args[1:])
         self.config = config.Config(vars(parsed))
-
         # Run CLI utilities
-        if self.config["status"]:
+        if parsed.status:
             self.status()
-        elif self.config["list_regions"]:
+        elif parsed.list_regions:
             self.list_regions()
 
     def status(self) -> None:
